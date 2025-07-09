@@ -5,7 +5,6 @@ use iced::{
         button, column, container, horizontal_rule, horizontal_space, row, text, vertical_space,
     },
 };
-use std::borrow::Cow;
 
 pub struct Scaffold<'a, Message> {
     title: Option<Element<'a, Message>>,
