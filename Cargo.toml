@@ -1,0 +1,20 @@
+[package]
+name = "frost_wizard"
+version.workspace = true
+edition = "2024"
+
+[dependencies]
+iced = { version = "0.13.1", features = ["tokio"] }
+rfd = { version = "0.15.3", default-features = false, features = [
+    "tokio",
+    "xdg-portal",
+] }
+
+[workspace]
+members = ["examples/*"]
+
+[workspace.package]
+version = "0.1.0"
+
+[workspace.dependencies]
+frost_wizard = { version = "0.1.0", path = "." }
