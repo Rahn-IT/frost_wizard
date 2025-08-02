@@ -20,7 +20,7 @@ impl BasicWizardConfig {
     pub fn to_installer(self) -> Installer<BasicWizard> {
         let install_config = InstallConfig {
             install_path: self.install_path,
-            payload: self.payload,
+            payloads: vec![self.payload],
         };
         let wizard = BasicWizard::from_config(install_config);
         Installer::from_wizard(wizard, self.manifest)

@@ -7,7 +7,7 @@ pub use manifest::AppManifest;
 #[derive(Clone)]
 pub struct InstallConfig {
     pub install_path: PathBuf,
-    pub payload: Arc<FilePayload>,
+    pub payloads: Vec<Arc<FilePayload>>,
 }
 
 pub enum FilePayload {
@@ -17,5 +17,8 @@ pub enum FilePayload {
         contents: Cow<'static, [u8]>,
     },
     /// A tar packed directory
-    Directory(Cow<'static, str>),
+    Directory {
+        unpacked_size: u64,
+        data: Cow<'static, str>,
+    },
 }

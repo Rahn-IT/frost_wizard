@@ -11,6 +11,7 @@ pub struct Scaffold<'a, Message> {
     controls: Vec<Element<'a, Message>>,
     on_next: Option<Message>,
     on_back: Option<Message>,
+    is_finished: bool,
 }
 
 impl<'a, Message> Scaffold<'a, Message> {
@@ -20,6 +21,7 @@ impl<'a, Message> Scaffold<'a, Message> {
             controls: Vec::new(),
             on_next: None,
             on_back: None,
+            is_finished: false,
         }
     }
 
@@ -34,12 +36,36 @@ impl<'a, Message> Scaffold<'a, Message> {
     }
 
     pub fn on_next(mut self, message: Message) -> Self {
+        self.is_finished = false;
         self.on_next = Some(message);
+        self
+    }
+
+    pub fn on_next_maybe(mut self, message: Option<Message>) -> Self {
+        self.is_finished = false;
+        self.on_next = message;
         self
     }
 
     pub fn on_back(mut self, message: Message) -> Self {
         self.on_back = Some(message);
+        self
+    }
+
+    pub fn on_back_maybe(mut self, message: Option<Message>) -> Self {
+        self.on_back = message;
+        self
+    }
+
+    pub fn on_finish(mut self, message: Message) -> Self {
+        self.is_finished = true;
+        self.on_next = Some(message);
+        self
+    }
+
+    pub fn on_finish_maybe(mut self, message: Option<Message>) -> Self {
+        self.is_finished = true;
+        self.on_next = message;
         self
     }
 }
@@ -66,9 +92,13 @@ where
                     button(text("Back"))
                         .padding([8, 30])
                         .on_press_maybe(scaffold.on_back),
-                    button(text("Next"))
-                        .padding([8, 30])
-                        .on_press_maybe(scaffold.on_next)
+                    button(text(if scaffold.is_finished {
+                        "Finish"
+                    } else {
+                        "Next"
+                    }))
+                    .padding([8, 30])
+                    .on_press_maybe(scaffold.on_next)
                 ]
                 .spacing(20)
                 .padding(10),
