@@ -19,6 +19,6 @@ pub enum FilePayload {
     /// A tar packed directory
     Directory {
         unpacked_size: u64,
-        data: Cow<'static, str>,
+        data: Cow<'static, [u8]>,
     },
 }
