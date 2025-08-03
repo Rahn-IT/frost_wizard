@@ -22,7 +22,7 @@ pub struct BasicWizard {
 }
 
 impl BasicWizard {
-    pub fn build() -> BasicWizardBuilder<(), (), ()> {
+    pub fn builder() -> BasicWizardBuilder<(), ()> {
         BasicWizardConfig::build()
     }
 

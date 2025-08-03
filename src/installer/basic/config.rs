@@ -6,59 +6,52 @@ use crate::{
     installer::Installer,
 };
 
-pub type BasicWizardConfig = BasicWizardBuilder<PathBuf, AppManifest, Arc<FilePayload>>;
+pub type BasicWizardConfig = BasicWizardBuilder<PathBuf, AppManifest>;
 
 impl BasicWizardConfig {
-    pub fn build() -> BasicWizardBuilder<(), (), ()> {
+    pub fn build() -> BasicWizardBuilder<(), ()> {
         BasicWizardBuilder {
             install_path: (),
             manifest: (),
-            payload: (),
+            payloads: Vec::new(),
         }
     }
 
     pub fn to_installer(self) -> Installer<BasicWizard> {
         let install_config = InstallConfig {
             install_path: self.install_path,
-            payloads: vec![self.payload],
+            payloads: self.payloads,
         };
         let wizard = BasicWizard::from_config(install_config);
         Installer::from_wizard(wizard, self.manifest)
     }
 }
 
-#[derive(Clone)]
-pub struct BasicWizardBuilder<A, B, C> {
+pub struct BasicWizardBuilder<A, B> {
     pub(super) install_path: A,
     manifest: B,
-    payload: C,
+    payloads: Vec<Arc<FilePayload>>,
 }
 
-impl<A, B, C> BasicWizardBuilder<A, B, C> {
-    pub fn default_install_path(
-        self,
-        path: impl Into<PathBuf>,
-    ) -> BasicWizardBuilder<PathBuf, B, C> {
+impl<A, B> BasicWizardBuilder<A, B> {
+    pub fn default_install_path(self, path: impl Into<PathBuf>) -> BasicWizardBuilder<PathBuf, B> {
         BasicWizardBuilder {
             install_path: path.into(),
             manifest: self.manifest,
-            payload: self.payload,
+            payloads: self.payloads,
         }
     }
 
-    pub fn manifest(self, manifest: AppManifest) -> BasicWizardBuilder<A, AppManifest, C> {
+    pub fn manifest(self, manifest: AppManifest) -> BasicWizardBuilder<A, AppManifest> {
         BasicWizardBuilder {
             install_path: self.install_path,
             manifest,
-            payload: self.payload,
+            payloads: self.payloads,
         }
     }
 
-    pub fn payload(self, payload: FilePayload) -> BasicWizardBuilder<A, B, Arc<FilePayload>> {
-        BasicWizardBuilder {
-            install_path: self.install_path,
-            manifest: self.manifest,
-            payload: Arc::new(payload),
-        }
+    pub fn add_payload(mut self, payload: FilePayload) -> BasicWizardBuilder<A, B> {
+        self.payloads.push(Arc::new(payload));
+        self
     }
 }

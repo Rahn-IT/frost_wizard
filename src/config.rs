@@ -16,9 +16,15 @@ pub enum FilePayload {
         name: Cow<'static, str>,
         contents: Cow<'static, [u8]>,
     },
-    /// A tar packed directory
-    Directory {
-        unpacked_size: u64,
-        data: Cow<'static, [u8]>,
-    },
+    /// A zip packed directory
+    Directory { data: Cow<'static, [u8]> },
+}
+
+#[macro_export]
+macro_rules! embed_directory {
+    ($path:expr) => {
+        FilePayload::Directory {
+            data: std::borrow::Cow::Borrowed(macros::include_dir_zip!($path)),
+        }
+    };
 }

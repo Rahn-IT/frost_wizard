@@ -12,9 +12,11 @@ rfd = { version = "0.15.3", default-features = false, features = [
 sipper = "0.1.0"
 thiserror = "2.0.12"
 tokio = { version = "1.47.1", features = ["fs"] }
+macros = { path = "macros" }
+zip = "4.3.0"
 
 [workspace]
-members = ["examples/*"]
+members = ["examples/*", "macros"]
 
 [workspace.package]
 version = "0.1.0"
