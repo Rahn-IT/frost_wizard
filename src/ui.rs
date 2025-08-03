@@ -9,7 +9,9 @@ use thiserror::Error;
 use tokio::{fs, io::AsyncWriteExt};
 use zip::{ZipArchive, result::ZipError};
 
-use crate::{AppManifest, FilePayload, config::InstallConfig, ui::scaffold::Scaffold};
+use crate::{
+    AppManifest, FilePayload, config::InstallConfig, ui::scaffold::Scaffold, wizard::WizardAction,
+};
 
 pub mod scaffold;
 
@@ -78,19 +80,8 @@ where
         match message {
             Message::Wizard(message) => {
                 if self.step == InstallerStep::Wizard {
-                    match self.wizard.update(message) {
-                        crate::wizard::WizardAction::None => Task::none(),
-                        crate::wizard::WizardAction::Run(task) => task.map(Message::Wizard),
-                        crate::wizard::WizardAction::Back => {
-                            self.step = InstallerStep::Introduction;
-                            Task::none()
-                        }
-                        crate::wizard::WizardAction::Install(config) => {
-                            self.step = InstallerStep::Installing;
-                            self.progress = 0.0;
-                            self.install(config)
-                        }
-                    }
+                    let action = self.wizard.update(message);
+                    self.handle_action(action)
                 } else {
                     Task::none()
                 }
@@ -98,7 +89,8 @@ where
             Message::Next => match &mut self.step {
                 InstallerStep::Introduction => {
                     self.step = InstallerStep::Wizard;
-                    Task::none()
+                    let action = self.wizard.start();
+                    self.handle_action(action)
                 }
                 InstallerStep::Wizard => Task::none(),
                 InstallerStep::Installing => {
@@ -121,6 +113,25 @@ where
                 Task::none()
             }
             Message::Finish => exit(),
+        }
+    }
+
+    fn handle_action(
+        &mut self,
+        action: WizardAction<Wizard::Message>,
+    ) -> Task<Message<Wizard::Message>> {
+        match action {
+            crate::wizard::WizardAction::None => Task::none(),
+            crate::wizard::WizardAction::Run(task) => task.map(Message::Wizard),
+            crate::wizard::WizardAction::Back => {
+                self.step = InstallerStep::Introduction;
+                Task::none()
+            }
+            crate::wizard::WizardAction::Install(config) => {
+                self.step = InstallerStep::Installing;
+                self.progress = 0.0;
+                self.install(config)
+            }
         }
     }
 

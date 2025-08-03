@@ -45,8 +45,8 @@ pub enum Message {
 impl Wizard for BasicWizard {
     type Message = Message;
 
-    fn start(&self) -> iced::Task<Self::Message> {
-        Task::none()
+    fn start(&self) -> WizardAction<Self::Message> {
+        WizardAction::None
     }
 
     fn update(&mut self, message: Self::Message) -> crate::wizard::WizardAction<Self::Message> {

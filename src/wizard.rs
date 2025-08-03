@@ -13,7 +13,7 @@ pub enum WizardAction<Message> {
 
 pub trait Wizard: Sized + 'static {
     type Message: Clone + Debug + Send;
-    fn start(&self) -> Task<Self::Message>;
+    fn start(&self) -> WizardAction<Self::Message>;
     fn update(&mut self, message: Self::Message) -> WizardAction<Self::Message>;
     fn view(&self) -> iced::Element<Self::Message>;
 }
