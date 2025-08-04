@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use clap::Parser;
 use iced::{
     Alignment::Center,
     Task,
@@ -34,6 +35,17 @@ impl BasicWizard {
     }
 }
 
+#[derive(Debug, clap::Parser)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// In silent mode the wizard will install the Application silently, without any user interaction.
+    #[arg(short, long, default_value_t = false)]
+    silent: bool,
+    /// Path to install the Application to in silent mode.
+    #[arg(short = 'p', long, default_value = None)]
+    install_path: Option<PathBuf>,
+}
+
 #[derive(Debug, Clone)]
 pub enum Message {
     SelectInstallPath,
@@ -47,6 +59,22 @@ impl Wizard for BasicWizard {
 
     fn start(&self) -> WizardAction<Self::Message> {
         WizardAction::None
+    }
+
+    fn unattended_install(&self) -> Option<InstallConfig> {
+        let args = Args::parse();
+
+        if args.silent {
+            let mut config = self.config.clone();
+
+            if let Some(path) = args.install_path {
+                config.install_path = path;
+            }
+
+            Some(config)
+        } else {
+            None
+        }
     }
 
     fn update(&mut self, message: Self::Message) -> crate::wizard::WizardAction<Self::Message> {
