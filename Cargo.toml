@@ -16,6 +16,7 @@ macros = { path = "macros" }
 zip = "4.3.0"
 clap = { version = "4.5.42", features = ["derive"] }
 indicatif = "0.18.0"
+windows-registry = "0.5.3"
 
 [workspace]
 members = ["examples/*", "macros"]
