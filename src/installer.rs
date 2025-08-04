@@ -18,7 +18,8 @@ impl<Wizard> Installer<Wizard>
 where
     Wizard: crate::wizard::Wizard,
 {
-    pub fn from_wizard(wizard: Wizard, manifest: AppManifest) -> Self {
+    pub fn from_wizard(wizard: Wizard) -> Self {
+        let manifest = wizard.get_manifest();
         Self { wizard, manifest }
     }
 

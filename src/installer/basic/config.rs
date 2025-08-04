@@ -22,8 +22,8 @@ impl BasicWizardConfig {
             install_path: self.install_path,
             payloads: self.payloads,
         };
-        let wizard = BasicWizard::from_config(install_config);
-        Installer::from_wizard(wizard, self.manifest)
+        let wizard = BasicWizard::from_config(install_config, self.manifest);
+        Installer::from_wizard(wizard)
     }
 }
 

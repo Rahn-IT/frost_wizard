@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use iced::Task;
 
-use crate::config::InstallConfig;
+use crate::{AppManifest, config::InstallConfig};
 
 pub enum WizardAction<Message> {
     None,
@@ -14,6 +14,9 @@ pub enum WizardAction<Message> {
 pub trait Wizard: Sized + 'static {
     type Message: Clone + Debug + Send;
 
+    /// Called before starting the graphical wizard
+    /// Here you can load the app manifest
+    fn get_manifest(&self) -> AppManifest;
     /// Called before starting the graphical wizard
     /// You can return Some(InstallConfig) to skip the wizard and install the system directly
     /// This is useful to allow unattended installation with e.g. a silent flag

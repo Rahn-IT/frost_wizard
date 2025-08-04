@@ -9,6 +9,7 @@ use iced::{
 use rfd::AsyncFileDialog;
 
 use crate::{
+    AppManifest,
     config::InstallConfig,
     installer::basic::config::{BasicWizardBuilder, BasicWizardConfig},
     ui::scaffold::Scaffold,
@@ -20,6 +21,7 @@ mod config;
 pub struct BasicWizard {
     config: InstallConfig,
     install_path_display: String,
+    manifest: AppManifest,
 }
 
 impl BasicWizard {
@@ -27,10 +29,11 @@ impl BasicWizard {
         BasicWizardConfig::build()
     }
 
-    fn from_config(config: InstallConfig) -> Self {
+    fn from_config(config: InstallConfig, manifest: AppManifest) -> Self {
         BasicWizard {
             install_path_display: config.install_path.display().to_string(),
             config,
+            manifest,
         }
     }
 }
@@ -59,6 +62,10 @@ impl Wizard for BasicWizard {
 
     fn start(&self) -> WizardAction<Self::Message> {
         WizardAction::None
+    }
+
+    fn get_manifest(&self) -> AppManifest {
+        self.manifest.clone()
     }
 
     fn unattended_install(&self) -> Option<InstallConfig> {
