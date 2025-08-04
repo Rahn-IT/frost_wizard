@@ -19,7 +19,7 @@ indicatif = "0.18.0"
 windows-registry = "0.5.3"
 
 [workspace]
-members = ["examples/*", "macros"]
+members = ["examples/*", "experiments", "macros"]
 
 [workspace.package]
 version = "0.1.0"
