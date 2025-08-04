@@ -53,7 +53,7 @@ async fn install_unattended(
     config: InstallConfig,
     manifest: AppManifest,
 ) -> Result<(), InstallError> {
-    let mut sipper = install(config, |progress| progress).pin();
+    let mut sipper = install(config, manifest.clone(), |progress| progress).pin();
 
     let bar = ProgressBar::new(BAR_FACTOR as u64)
         .with_style(
@@ -95,17 +95,18 @@ pub enum InstallError {
 
 pub(crate) fn install<Output>(
     config: InstallConfig,
+    _manifest: AppManifest,
     mapper: impl Fn(Result<(), InstallError>) -> Output,
 ) -> impl sipper::Sipper<Output, f32> {
     let sipper = sipper(|mut sender| {
         async move {
-            let config = config;
-
             fs::create_dir_all(&config.install_path)
                 .await
                 .map_err(InstallError::CreateInstallDir)?;
 
             let mut full_size = 0u64;
+
+            // Calculate overall size
 
             for payload in &config.payloads {
                 match payload.as_ref() {
@@ -120,7 +121,9 @@ pub(crate) fn install<Output>(
                 }
             }
 
-            let full_size = full_size as f32;
+            let _full_size_kb = full_size / 1024;
+            // Size is a bit larger, so the progress isn't yet full when adding services and creating the registry entries
+            let full_size = full_size as f32 * 1.1;
 
             let mut written = 0u64;
 
@@ -171,6 +174,24 @@ pub(crate) fn install<Output>(
                             }
                         }
                     }
+                }
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                let name_for_path = _manifest.name.replace(|c: char| !c.is_alphanumeric(), "");
+                let registry_path = format!(
+                    "\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}",
+                    name_for_path
+                );
+                let key = windows_registry::LOCAL_MACHINE::create(&path)?;
+                key.set_string("DisplayName", _manifest.name)?;
+                key.set_string("DisplayVersion", _manifest.version)?;
+                key.set_string("InstallLocation", config.install_location)?;
+                key.set_u32("EstimatedSize", full_size_kb as u32)?;
+
+                if let Some(publisher) = _manifest.publisher {
+                    key.set_string("Publisher", publisher)?;
                 }
             }
 

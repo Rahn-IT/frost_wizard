@@ -170,11 +170,12 @@ where
     }
 
     fn install(&self, config: InstallConfig) -> Task<Message<Wizard::Message>> {
-        let sipper = crate::installer::install(config, |result| match result {
-            Ok(()) => Message::InstallDone,
-            Err(error) => Message::InstallError(Arc::new(error)),
-        })
-        .with(|message| Message::Progress(message));
+        let sipper =
+            crate::installer::install(config, self.manifest.clone(), |result| match result {
+                Ok(()) => Message::InstallDone,
+                Err(error) => Message::InstallError(Arc::new(error)),
+            })
+            .with(|message| Message::Progress(message));
 
         Task::stream(sipper::stream(sipper))
     }

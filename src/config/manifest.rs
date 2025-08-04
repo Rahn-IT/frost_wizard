@@ -11,6 +11,7 @@ impl AppManifest {
         AppManifestBuilder {
             name: (),
             version: (),
+            publisher: None,
             icon: None,
         }
     }
@@ -20,6 +21,7 @@ impl AppManifest {
 pub struct AppManifestBuilder<A, B> {
     pub(crate) name: A,
     pub(crate) version: B,
+    pub(crate) publisher: Option<String>,
     pub(crate) icon: Option<Vec<u8>>,
 }
 
@@ -28,6 +30,7 @@ impl<A, B> AppManifestBuilder<A, B> {
         AppManifestBuilder {
             name: name.into(),
             version: self.version,
+            publisher: self.publisher,
             icon: self.icon,
         }
     }
@@ -36,6 +39,16 @@ impl<A, B> AppManifestBuilder<A, B> {
         AppManifestBuilder {
             name: self.name,
             version: version.into(),
+            publisher: self.publisher,
+            icon: self.icon,
+        }
+    }
+
+    pub fn publisher(self, publisher: impl Into<String>) -> AppManifestBuilder<A, B> {
+        AppManifestBuilder {
+            name: self.name,
+            version: self.version,
+            publisher: Some(publisher.into()),
             icon: self.icon,
         }
     }
@@ -44,6 +57,7 @@ impl<A, B> AppManifestBuilder<A, B> {
         AppManifestBuilder {
             name: self.name,
             version: self.version,
+            publisher: self.publisher,
             icon: Some(icon),
         }
     }
