@@ -24,14 +24,10 @@ pub fn search_for_embedded_data() -> Result<Option<impl Read>, io::Error> {
 
     file.seek(SeekFrom::End(-(FINGERPRINT.len() as i64) - 8))?;
     let length = file.read_u64_le()?;
-    println!("Found embedded data section with {} bytes", length);
-    println!("Total file size: {}", file.metadata()?.len());
     let seek_position = SeekFrom::End(-(FINGERPRINT.len() as i64) - 8 - length as i64);
 
-    println!("Seeking to position {:?}", seek_position);
     file.seek(seek_position)?;
 
-    println!("Creating Take");
     let reader = file.take(length);
 
     Ok(Some(reader))
@@ -84,9 +80,7 @@ impl Write for AppendDataWriter {
 
     fn flush(&mut self) -> std::io::Result<()> {
         let total_size = self.file.seek(SeekFrom::End(0))?;
-        println!("Total file size: {}", self.file.metadata()?.len());
         let written = total_size - self.start;
-        println!("Finishing embedded data section with {} bytes", written);
         self.file.write_u64_le(written)?;
         self.file.write_all(FINGERPRINT)?;
 
