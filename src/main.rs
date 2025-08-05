@@ -128,7 +128,6 @@ fn main() {
             let app_manifest_bytes = postcard::to_stdvec(&app_manifest).unwrap();
 
             let mut append_writer = append_data(installer_name.as_ref()).unwrap();
-            println!("Writing manifest length: {}", app_manifest_bytes.len());
             append_writer
                 .write_u64_le(app_manifest_bytes.len() as u64)
                 .unwrap();
@@ -167,7 +166,7 @@ fn main() {
             let mut writer = zip.finish().unwrap();
             writer.flush().unwrap();
 
-            println!("Installer created successfully!");
+            println!("Installer saved to {}", installer_name.display());
         }
     }
 }
