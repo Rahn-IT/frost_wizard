@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use crate::{
     BasicWizard,
@@ -30,7 +30,7 @@ impl BasicWizardConfig {
 pub struct BasicWizardBuilder<A, B> {
     pub(super) install_path: A,
     manifest: B,
-    payloads: Vec<Arc<FilePayload>>,
+    payloads: Vec<FilePayload>,
 }
 
 impl<A, B> BasicWizardBuilder<A, B> {
@@ -51,7 +51,7 @@ impl<A, B> BasicWizardBuilder<A, B> {
     }
 
     pub fn add_payload(mut self, payload: FilePayload) -> BasicWizardBuilder<A, B> {
-        self.payloads.push(Arc::new(payload));
+        self.payloads.push(payload);
         self
     }
 }

@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
+use std::num::ParseIntError;
 use std::path::Path;
 use std::{fs, io};
 use syn::{LitStr, parse_macro_input};
@@ -75,4 +76,24 @@ pub fn include_dir_zip(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+#[proc_macro]
+pub fn hex_bytes(input: TokenStream) -> TokenStream {
+    let input_path = parse_macro_input!(input as LitStr).value();
+
+    let bytes = decode_hex(&input_path).expect("Failed to decode hex string");
+
+    let expanded = quote! {
+        &[#(#bytes),*]
+    };
+
+    TokenStream::from(expanded)
+}
+
+fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
+        .collect()
 }

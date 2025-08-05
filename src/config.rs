@@ -1,13 +1,12 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
-use std::{borrow::Cow, sync::Arc};
 
 mod manifest;
 pub use manifest::AppManifest;
 
-#[derive(Clone)]
 pub struct InstallConfig {
     pub install_path: PathBuf,
-    pub payloads: Vec<Arc<FilePayload>>,
+    pub payloads: Vec<FilePayload>,
 }
 
 pub enum FilePayload {
@@ -17,14 +16,24 @@ pub enum FilePayload {
         contents: Cow<'static, [u8]>,
     },
     /// A zip packed directory
-    Directory { data: Cow<'static, [u8]> },
+    Directory {
+        unpacked_size: u64,
+        reader: Box<dyn DirTrait + Send + Sync>,
+    },
 }
+
+pub trait DirTrait: std::io::Read + std::io::Seek {}
+
+impl<T> DirTrait for T where T: std::io::Read + std::io::Seek {}
 
 #[macro_export]
 macro_rules! embed_directory {
-    ($path:expr) => {
+    ($path:expr) => {{
+        let data = macros::include_dir_zip!($path);
+
         FilePayload::Directory {
-            data: std::borrow::Cow::Borrowed(macros::include_dir_zip!($path)),
+            reader: Box::new(std::io::Cursor::new(data)),
+            unpacked_size: data.len() as u64,
         }
-    };
+    }};
 }

@@ -20,7 +20,7 @@ pub trait Wizard: Sized + 'static {
     /// Called before starting the graphical wizard
     /// You can return Some(InstallConfig) to skip the wizard and install the system directly
     /// This is useful to allow unattended installation with e.g. a silent flag
-    fn unattended_install(&self) -> Option<InstallConfig>;
+    fn unattended_install(&mut self) -> Option<InstallConfig>;
     /// Called when the wizard is first shown
     fn start(&self) -> WizardAction<Self::Message>;
     /// Iced update method for the wizard

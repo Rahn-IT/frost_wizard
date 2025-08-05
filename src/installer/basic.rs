@@ -19,7 +19,7 @@ use crate::{
 mod config;
 
 pub struct BasicWizard {
-    config: InstallConfig,
+    config: Option<InstallConfig>,
     install_path_display: String,
     manifest: AppManifest,
 }
@@ -32,7 +32,7 @@ impl BasicWizard {
     fn from_config(config: InstallConfig, manifest: AppManifest) -> Self {
         BasicWizard {
             install_path_display: config.install_path.display().to_string(),
-            config,
+            config: Some(config),
             manifest,
         }
     }
@@ -68,11 +68,11 @@ impl Wizard for BasicWizard {
         self.manifest.clone()
     }
 
-    fn unattended_install(&self) -> Option<InstallConfig> {
+    fn unattended_install(&mut self) -> Option<InstallConfig> {
         let args = Args::parse();
 
         if args.silent {
-            let mut config = self.config.clone();
+            let mut config = self.config.take()?;
 
             if let Some(path) = args.install_path {
                 config.install_path = path;
@@ -101,14 +101,22 @@ impl Wizard for BasicWizard {
             }
             Message::SetInstallPath(path) => {
                 if let Some(path) = path {
-                    self.config.install_path = path;
+                    if let Some(config) = self.config.as_mut() {
+                        config.install_path = path;
+                        self.install_path_display = config.install_path.display().to_string();
+                    }
                 }
-                self.install_path_display = self.config.install_path.display().to_string();
                 WizardAction::None
             }
 
             Message::Back => WizardAction::Back,
-            Message::Next => WizardAction::Install(self.config.clone()),
+            Message::Next => {
+                if let Some(config) = self.config.take() {
+                    WizardAction::Install(config)
+                } else {
+                    WizardAction::None
+                }
+            }
         }
     }
 

@@ -4,6 +4,8 @@
 //     pub icon: Option<Vec<u8>>,
 // }
 
+use serde::{Deserialize, Serialize};
+
 pub type AppManifest = AppManifestBuilder<String, String>;
 
 impl AppManifest {
@@ -17,7 +19,7 @@ impl AppManifest {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct AppManifestBuilder<A, B> {
     pub(crate) name: A,
     pub(crate) version: B,
