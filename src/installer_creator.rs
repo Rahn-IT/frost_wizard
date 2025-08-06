@@ -48,7 +48,7 @@ enum Command {
         #[arg(short = 'o', long = "out")]
         installer_name: Option<PathBuf>,
         /// Path to the Cargo.toml
-        #[arg(long = "cargo", default_value = "Cargo.toml")]
+        #[arg(short = 'm', long = "manifest", default_value = "./Cargo.toml")]
         cargo_manifest_path: PathBuf,
     },
 }
