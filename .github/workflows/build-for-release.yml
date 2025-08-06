@@ -1,0 +1,53 @@
+name: Build Release Binaries
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build-windows:
+    name: Build Windows .exe
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: install rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build release binary
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Upload release binary
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/x86_64-pc-windows-msvc/release/frost-wizard.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    name: Build linux executable
+    runs-on: debian-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: install rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Build release binary
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - run: mv target/x86_64-unknown-linux-gnu/release/frost_wizard target/x86_64-unknown-linux-gnu/release/frost_wizard_x64_linux
+      - name: Upload release binary
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/x86_64-unknown-linux-gnu/release/frost_wizard_x64_linux
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
