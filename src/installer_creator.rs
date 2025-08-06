@@ -104,12 +104,14 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
             };
 
             let bin_name = bin.name.ok_or(CreateInstallerError::MissingBinaryName)?;
+            #[cfg(windows)]
             let installer_name = installer_name.unwrap_or_else(|| {
                 #[cfg(target_os = "windows")]
                 return PathBuf::from(format!("{}_installer.exe", bin_name));
                 #[cfg(not(target_os = "windows"))]
                 return PathBuf::from(format!("{}_installer", bin_name));
             });
+            let bin_name = format!("{}.exe", bin_name);
 
             println!("building binary with cargo...");
 
@@ -157,25 +159,33 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
                 search_path = Path::new(".");
             }
 
+            println!("Building installer for:\n{}\n{}", friendly_name, version);
+
             let mut bin_path = None;
 
+            println!("Looking for compiled binary");
+
             while let Some(dir) = search_path.parent() {
-                let mut search_path = dir.to_path_buf();
-                search_path.push("target");
-                search_path.push("release");
-                search_path.push(bin_name.as_str());
-                if search_path.exists() {
-                    bin_path = Some(search_path);
+                let mut temp_path = dir.to_path_buf();
+                temp_path.push("target");
+                temp_path.push("release");
+                temp_path.push(bin_name.as_str());
+                if temp_path.exists() {
+                    bin_path = Some(temp_path);
                     break;
                 }
+                search_path = dir;
             }
             let bin_path = bin_path.ok_or(CreateInstallerError::BinaryMissing)?;
+
+            println!("Found binary at {}", bin_path.display());
 
             let bin_file = File::open(bin_path)?;
             #[cfg(unix)]
             let bin_size = bin_file.metadata()?.size();
             #[cfg(windows)]
             let bin_size = bin_file.metadata()?.file_size();
+
 
             let embedded_config = EmbeddedConfig {
                 default_install_path,
@@ -185,11 +195,15 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
 
             let config_bytes = postcard::to_stdvec(&embedded_config)?;
 
+            println!("Embedding Config");
+
             let mut append_writer = append_data(installer_name.as_ref())?;
             let length_bytes = (config_bytes.len() as u64).to_le_bytes();
             append_writer.write_all(&length_bytes)?;
             append_writer.write_all(&config_bytes)?;
             append_writer.move_start_to_current()?;
+
+            println!("Zipping and embedding files");
 
             let mut zip = ZipWriter::new(append_writer);
             let options = SimpleFileOptions::default()
@@ -198,6 +212,8 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
             zip.start_file(bin_name.clone(), options)?;
             let mut bin_reader = BufReader::new(bin_file);
             std::io::copy(&mut bin_reader, &mut zip)?;
+
+            println!("Flushing data");
 
             let mut append_writer = zip.finish()?;
             append_writer.flush()?;
