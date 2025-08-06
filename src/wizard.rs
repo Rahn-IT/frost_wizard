@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use iced::Task;
 
-use crate::{AppManifest, config::InstallConfig};
+use crate::config::{AppManifest, InstallConfig};
 
 pub mod basic;
 

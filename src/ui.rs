@@ -8,7 +8,9 @@ use sipper::Sipper;
 use zip::result::ZipError;
 
 use crate::{
-    AppManifest, config::InstallConfig, installer::InstallError, ui::scaffold::Scaffold,
+    config::{AppManifest, InstallConfig},
+    installer::InstallError,
+    ui::scaffold::Scaffold,
     wizard::WizardAction,
 };
 

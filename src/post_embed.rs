@@ -1,3 +1,6 @@
+/// This module provides functionality for embedding data into the current executable by copying it and appending the data.
+///
+/// It also provides the function required to read the embedded data again.
 use std::{
     env::current_exe,
     fs::File,

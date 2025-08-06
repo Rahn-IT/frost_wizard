@@ -9,7 +9,10 @@ use sipper::{FutureExt, Sipper, sipper};
 use tokio::sync::mpsc;
 use zip::{ZipArchive, result::ZipError};
 
-use crate::{AppManifest, FilePayload, config::InstallConfig, ui::InstallerUi};
+use crate::{
+    config::{AppManifest, FilePayload, InstallConfig},
+    ui::InstallerUi,
+};
 
 pub struct Installer<Wizard> {
     manifest: AppManifest,
@@ -29,13 +32,16 @@ where
         if let Some(config) = self.wizard.unattended_install() {
             // Perform unattended installation using the provided config
             let runtime = tokio::runtime::Runtime::new().unwrap();
+            let name = self.manifest.name.clone();
             let install_result =
                 runtime.block_on(async { install_unattended(config, self.manifest).await });
             match install_result {
                 Ok(()) => {
+                    println!("{} installed successfully!", name);
                     std::process::exit(0);
                 }
-                Err(_) => {
+                Err(err) => {
+                    eprintln!("Error during unattended install: {}", err);
                     std::process::exit(1);
                 }
             }
@@ -63,7 +69,7 @@ async fn install_unattended(
             ProgressStyle::with_template(
                 "{spinner} {msg}\n[{percent}%] {wide_bar:40.cyan/blue} [{elapsed}]",
             )
-            .unwrap()
+            .expect("Fixed template can't fail")
             .progress_chars("##-"),
         )
         .with_message(format!("Installing {}", manifest.name));
@@ -75,11 +81,6 @@ async fn install_unattended(
     }
 
     let result = sipper.await;
-
-    match &result {
-        Ok(()) => bar.finish_with_message(format!("{} installed successfully!", manifest.name)),
-        Err(err) => bar.finish_with_message(format!("Installation failed: {}", err)),
-    }
 
     result
 }
@@ -168,7 +169,7 @@ async fn inner_install(
                         let mut file =
                             fs::File::create(path).map_err(InstallError::WritePayload)?;
 
-                        let mut buf = [0; 1024];
+                        let mut buf = [0; 8192];
 
                         loop {
                             let n = reader.read(&mut buf).map_err(InstallError::WritePayload)?;
@@ -190,20 +191,7 @@ async fn inner_install(
 
         #[cfg(target_os = "windows")]
         {
-            let name_for_path = _manifest.name.replace(|c: char| !c.is_alphanumeric(), "");
-            let registry_path = format!(
-                "\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}",
-                name_for_path
-            );
-            let key = windows_registry::LOCAL_MACHINE::create(&path)?;
-            key.set_string("DisplayName", _manifest.name)?;
-            key.set_string("DisplayVersion", _manifest.version)?;
-            key.set_string("InstallLocation", config.install_location)?;
-            key.set_u32("EstimatedSize", full_size_kb as u32)?;
-
-            if let Some(publisher) = _manifest.publisher {
-                key.set_string("Publisher", publisher)?;
-            }
+            set_registry_keys();
         }
 
         sender.blocking_send(1.0).unwrap();
@@ -212,4 +200,22 @@ async fn inner_install(
     })
     .await
     .unwrap()
+}
+
+#[cfg(target_os = "windows")]
+fn set_registry_keys() {
+    let name_for_path = _manifest.name.replace(|c: char| !c.is_alphanumeric(), "");
+    let registry_path = format!(
+        "\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}",
+        name_for_path
+    );
+    let key = windows_registry::LOCAL_MACHINE::create(&path)?;
+    key.set_string("DisplayName", _manifest.name)?;
+    key.set_string("DisplayVersion", _manifest.version)?;
+    key.set_string("InstallLocation", config.install_location)?;
+    key.set_u32("EstimatedSize", full_size_kb as u32)?;
+
+    if let Some(publisher) = _manifest.publisher {
+        key.set_string("Publisher", publisher)?;
+    }
 }

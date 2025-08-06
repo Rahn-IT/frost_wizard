@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use crate::{
-    BasicWizard,
     config::{AppManifest, FilePayload, InstallConfig},
     installer::Installer,
+    wizard::basic::BasicWizard,
 };
 
 pub type BasicWizardConfig = BasicWizardBuilder<PathBuf, AppManifest>;

@@ -9,8 +9,7 @@ use iced::{
 use rfd::AsyncFileDialog;
 
 use crate::{
-    AppManifest,
-    config::InstallConfig,
+    config::{AppManifest, InstallConfig},
     ui::scaffold::Scaffold,
     wizard::{
         Wizard, WizardAction,

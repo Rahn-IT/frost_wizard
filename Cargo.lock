@@ -1386,7 +1386,6 @@ dependencies = [
  "sipper",
  "thiserror 2.0.12",
  "tokio",
- "toml",
  "windows-registry",
  "zip",
 ]
