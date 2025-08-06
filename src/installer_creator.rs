@@ -38,14 +38,14 @@ struct Args {
 
 #[derive(Debug, clap::Subcommand)]
 enum Command {
-    /// Create a new frost_wizard from the current rust crate
-    Create {
+    /// Create a new frost_wizard from a Cargo.toml
+    Cargo {
         /// Filename of the resulting installer
         #[arg(short = 'o', long = "out")]
         installer_name: Option<PathBuf>,
         /// Path to the Cargo.toml
-        #[arg(short, long, default_value = "Cargo.toml")]
-        manifest_path: PathBuf,
+        #[arg(long = "cargo", default_value = "Cargo.toml")]
+        cargo_manifest_path: PathBuf,
     },
 }
 
@@ -80,12 +80,12 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
     let args = Args::parse();
 
     match args.command {
-        Command::Create {
+        Command::Cargo {
             installer_name,
-            manifest_path,
+            cargo_manifest_path,
         } => {
             let cargo_manifest =
-                cargo_toml::Manifest::<Metadata>::from_path_with_metadata(&manifest_path)?;
+                cargo_toml::Manifest::<Metadata>::from_path_with_metadata(&cargo_manifest_path)?;
 
             let bin = match cargo_manifest.bin.len() {
                 0 => {
@@ -113,7 +113,7 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
                 .arg("build")
                 .arg("--release")
                 .arg("--manifest-path")
-                .arg(&manifest_path)
+                .arg(&cargo_manifest_path)
                 .stdout(std::process::Stdio::inherit())
                 .stderr(std::process::Stdio::inherit())
                 .status();
@@ -146,7 +146,7 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
                 // TODO: generate install path from bin name
                 .unwrap_or_else(|| PathBuf::from("/home/acul/test"));
 
-            let mut search_path = manifest_path
+            let mut search_path = cargo_manifest_path
                 .parent()
                 .expect("Cargo.toml should have a parent");
             if search_path == Path::new("") {

@@ -31,7 +31,7 @@ macro_rules! embed_directory {
     ($path:expr) => {{
         let data = macros::include_dir_zip!($path);
 
-        FilePayload::Directory {
+        frost_wizard::config::FilePayload::Directory {
             reader: Box::new(std::io::Cursor::new(data)),
             unpacked_size: data.len() as u64,
         }

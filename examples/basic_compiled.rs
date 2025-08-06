@@ -1,4 +1,4 @@
-use frost_wizard::{AppManifest, BasicWizard, FilePayload, embed_directory};
+use frost_wizard::{config::AppManifest, embed_directory, wizard::basic::BasicWizard};
 
 fn main() {
     BasicWizard::builder()
@@ -10,13 +10,6 @@ fn main() {
                 .publisher("Rahn-IT"),
         )
         .add_payload(embed_directory!("testdata"))
-        // .add_payload({
-        //     let data = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
-        //     FilePayload::Directory {
-        //         reader: Box::new(std::io::Cursor::new(data)),
-        //         unpacked_size: 10,
-        //     }
-        // })
         .to_installer()
         .run()
         .unwrap();
