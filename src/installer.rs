@@ -11,8 +11,6 @@ use zip::{ZipArchive, result::ZipError};
 
 use crate::{AppManifest, FilePayload, config::InstallConfig, ui::InstallerUi};
 
-pub mod basic;
-
 pub struct Installer<Wizard> {
     manifest: AppManifest,
     wizard: Wizard,
@@ -107,9 +105,11 @@ pub(crate) fn install<Output>(
 
             let install_future = inner_install(send, config, manifest);
 
-            while let Some(progress) = recv.recv().await {
-                sender.send(progress).await;
-            }
+            tokio::spawn(async move {
+                while let Some(progress) = recv.recv().await {
+                    sender.send(progress).await;
+                }
+            });
 
             install_future.await
         }

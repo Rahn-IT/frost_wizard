@@ -4,6 +4,8 @@ use iced::Task;
 
 use crate::{AppManifest, config::InstallConfig};
 
+pub mod basic;
+
 pub enum WizardAction<Message> {
     None,
     Run(Task<Message>),

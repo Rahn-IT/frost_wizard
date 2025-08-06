@@ -5,6 +5,7 @@ use iced::{
     widget::{horizontal_space, progress_bar, row, text},
 };
 use sipper::Sipper;
+use zip::result::ZipError;
 
 use crate::{
     AppManifest, config::InstallConfig, installer::InstallError, ui::scaffold::Scaffold,
@@ -122,8 +123,23 @@ where
     }
 
     pub fn view<'a>(&'a self) -> Element<'a, Message<Wizard::Message>> {
-        if let Some(_error) = &self.error {
-            todo!()
+        if let Some(error) = &self.error {
+            let error_message = if let InstallError::ZipError(ZipError::Io(io)) = error.as_ref() {
+                format!("{error}:\n{io}")
+            } else {
+                format!("{error}")
+            };
+
+            return Scaffold::new()
+                .title(row![
+                    text(&self.manifest.name).size(24),
+                    horizontal_space(),
+                    text(&self.manifest.version).size(24)
+                ])
+                .control(text("Error during installation!"))
+                .control(text(error_message))
+                .on_finish(Message::Finish)
+                .into();
         }
 
         match &self.step {
