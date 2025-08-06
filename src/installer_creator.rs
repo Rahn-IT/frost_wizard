@@ -1,9 +1,13 @@
+
 use std::{
     fs::File,
     io::{BufReader, Write},
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
 };
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 
 use clap::Parser;
 use serde::{Deserialize, Serialize};
@@ -168,7 +172,10 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
             let bin_path = bin_path.ok_or(CreateInstallerError::BinaryMissing)?;
 
             let bin_file = File::open(bin_path)?;
+            #[cfg(unix)]
             let bin_size = bin_file.metadata()?.size();
+            #[cfg(windows)]
+            let bin_size = bin_file.metadata()?.file_size();
 
             let embedded_config = EmbeddedConfig {
                 default_install_path,

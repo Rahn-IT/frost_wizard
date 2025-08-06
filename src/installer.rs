@@ -1,3 +1,5 @@
+#[cfg(target_os = "windows")]
+use std::path::Path;
 use std::{
     fs,
     io::{Read, Write},
@@ -93,6 +95,9 @@ pub enum InstallError {
     WritePayload(std::io::Error),
     #[error("Failed to extract payload into install directory:\n{0}")]
     ZipError(ZipError),
+    #[cfg(windows)]
+    #[error("Failed to set Registry Keys:\n{0}")]
+    RegistryError(windows_result::Error)
 }
 
 pub(crate) fn install<Output>(
@@ -191,7 +196,7 @@ async fn inner_install(
 
         #[cfg(target_os = "windows")]
         {
-            set_registry_keys();
+            set_registry_keys(&_manifest, &config.install_path, written).map_err(InstallError::RegistryError)?;
         }
 
         sender.blocking_send(1.0).unwrap();
@@ -203,19 +208,21 @@ async fn inner_install(
 }
 
 #[cfg(target_os = "windows")]
-fn set_registry_keys() {
-    let name_for_path = _manifest.name.replace(|c: char| !c.is_alphanumeric(), "");
+fn set_registry_keys(manifest: &AppManifest, install_location: &Path, size: u64) -> Result<(), windows_result::Error> {
+    let name_for_path = manifest.name.replace(|c: char| !c.is_alphanumeric(), "");
     let registry_path = format!(
         "\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}",
         name_for_path
     );
-    let key = windows_registry::LOCAL_MACHINE::create(&path)?;
-    key.set_string("DisplayName", _manifest.name)?;
-    key.set_string("DisplayVersion", _manifest.version)?;
-    key.set_string("InstallLocation", config.install_location)?;
-    key.set_u32("EstimatedSize", full_size_kb as u32)?;
+    let key = windows_registry::LOCAL_MACHINE.create(&registry_path)?;
+    key.set_string("DisplayName", &manifest.name)?;
+    key.set_string("DisplayVersion", &manifest.version)?;
+    key.set_string("InstallLocation", install_location.to_string_lossy().as_ref())?;
+    key.set_u32("EstimatedSize", size as u32)?;
 
-    if let Some(publisher) = _manifest.publisher {
+    if let Some(publisher) = &manifest.publisher {
         key.set_string("Publisher", publisher)?;
     }
+
+    Ok(())
 }
