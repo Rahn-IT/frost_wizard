@@ -1,13 +1,12 @@
-
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::{
     fs::File,
     io::{BufReader, Write},
     path::{Path, PathBuf},
 };
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
 
 use clap::Parser;
 use serde::{Deserialize, Serialize};
@@ -104,11 +103,10 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
             };
 
             let bin_name = bin.name.ok_or(CreateInstallerError::MissingBinaryName)?;
-            #[cfg(windows)]
             let installer_name = installer_name.unwrap_or_else(|| {
-                #[cfg(target_os = "windows")]
+                #[cfg(windows)]
                 return PathBuf::from(format!("{}_installer.exe", bin_name));
-                #[cfg(not(target_os = "windows"))]
+                #[cfg(not(windows))]
                 return PathBuf::from(format!("{}_installer", bin_name));
             });
             let bin_name = format!("{}.exe", bin_name);
