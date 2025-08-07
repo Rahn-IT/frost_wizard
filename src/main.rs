@@ -9,7 +9,10 @@ use frost_wizard::{
     wizard::basic::BasicWizard,
 };
 
+use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+
 fn main() {
+    let _attach_result = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
     if let Some(embedded_reader) =
         search_for_embedded_data().expect("Error while checking for embedded data")
     {
