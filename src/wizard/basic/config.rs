@@ -21,6 +21,8 @@ impl BasicWizardConfig {
         let install_config = InstallConfig {
             install_path: self.install_path,
             payloads: self.payloads,
+            create_start_menu_shortcut: true,
+            create_desktop_shortcut: false,
         };
         let wizard = BasicWizard::from_config(install_config, self.manifest);
         Installer::from_wizard(wizard)

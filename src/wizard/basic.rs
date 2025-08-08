@@ -4,7 +4,7 @@ use clap::Parser;
 use iced::{
     Alignment::Center,
     Task,
-    widget::{button, horizontal_space, row, text},
+    widget::{button, checkbox, horizontal_space, row, text},
 };
 use rfd::AsyncFileDialog;
 
@@ -19,9 +19,15 @@ use crate::{
 
 mod config;
 
+enum Step {
+    SelectInstallPath,
+    SetInstallOptions,
+}
+
 pub struct BasicWizard {
     config: Option<InstallConfig>,
-    install_path_display: String,
+    selecting_path: bool,
+    step: Step,
     manifest: AppManifest,
 }
 
@@ -32,8 +38,9 @@ impl BasicWizard {
 
     fn from_config(config: InstallConfig, manifest: AppManifest) -> Self {
         BasicWizard {
-            install_path_display: config.install_path.display().to_string(),
             config: Some(config),
+            selecting_path: false,
+            step: Step::SelectInstallPath,
             manifest,
         }
     }
@@ -54,6 +61,8 @@ struct Args {
 pub enum Message {
     SelectInstallPath,
     SetInstallPath(Option<PathBuf>),
+    StartMenuShortcut(bool),
+    DesktopShortcut(bool),
     Back,
     Next,
 }
@@ -88,7 +97,7 @@ impl Wizard for BasicWizard {
     fn update(&mut self, message: Self::Message) -> crate::wizard::WizardAction<Self::Message> {
         match message {
             Message::SelectInstallPath => {
-                self.install_path_display = "Selecting...".to_string();
+                self.selecting_path = true;
                 let task = Task::perform(
                     async {
                         AsyncFileDialog::new()
@@ -101,44 +110,95 @@ impl Wizard for BasicWizard {
                 WizardAction::Run(task)
             }
             Message::SetInstallPath(path) => {
+                self.selecting_path = false;
                 if let Some(path) = path {
                     if let Some(config) = self.config.as_mut() {
                         config.install_path = path;
-                        self.install_path_display = config.install_path.display().to_string();
                     }
                 }
                 WizardAction::None
             }
-
-            Message::Back => WizardAction::Back,
-            Message::Next => {
-                if let Some(config) = self.config.take() {
-                    WizardAction::Install(config)
-                } else {
+            Message::StartMenuShortcut(create_shortcut) => {
+                if let Some(config) = self.config.as_mut() {
+                    config.create_desktop_shortcut = create_shortcut;
+                }
+                WizardAction::None
+            }
+            Message::DesktopShortcut(create_shortcut) => {
+                if let Some(config) = self.config.as_mut() {
+                    config.create_start_menu_shortcut = create_shortcut;
+                }
+                WizardAction::None
+            }
+            Message::Back => match self.step {
+                Step::SelectInstallPath => WizardAction::Back,
+                Step::SetInstallOptions => {
+                    self.step = Step::SelectInstallPath;
                     WizardAction::None
                 }
-            }
+            },
+            Message::Next => match self.step {
+                Step::SelectInstallPath => {
+                    self.step = Step::SetInstallOptions;
+                    WizardAction::None
+                }
+                Step::SetInstallOptions => {
+                    if let Some(config) = self.config.take() {
+                        WizardAction::Install(config)
+                    } else {
+                        WizardAction::None
+                    }
+                }
+            },
         }
     }
 
     fn view(&self) -> iced::Element<Self::Message> {
-        Scaffold::new()
-            .title(row![
-                text(&self.manifest.name).size(24),
-                horizontal_space(),
-                text(&self.manifest.version).size(24)
-            ])
-            .control(text("Select install location").size(20))
-            .control(
-                row![
-                    button("Select Folder").on_press(Message::SelectInstallPath),
-                    text(&self.install_path_display)
-                ]
-                .spacing(20)
-                .align_y(Center),
-            )
-            .on_next(Message::Next)
-            .on_back(Message::Back)
-            .into()
+        let config = self.config.as_ref().unwrap();
+        match self.step {
+            Step::SelectInstallPath => Scaffold::new()
+                .title(row![
+                    text(&self.manifest.friendly_name).size(24),
+                    horizontal_space(),
+                    text(&self.manifest.version).size(24)
+                ])
+                .control(text("Select install location").size(20))
+                .control(
+                    row![
+                        button("Select Folder").on_press(Message::SelectInstallPath),
+                        if self.selecting_path {
+                            text("Selecting...")
+                        } else {
+                            text(config.install_path.display().to_string())
+                        }
+                    ]
+                    .spacing(20)
+                    .align_y(Center),
+                )
+                .on_next_maybe((!self.selecting_path).then(|| Message::Next))
+                .on_back(Message::Back)
+                .into(),
+            Step::SetInstallOptions => Scaffold::new()
+                .title(row![
+                    text(&self.manifest.friendly_name).size(24),
+                    horizontal_space(),
+                    text(&self.manifest.version).size(24)
+                ])
+                .control(text("Set installation options").size(20))
+                .control(
+                    checkbox(
+                        "Create start menu shortcut",
+                        config.create_start_menu_shortcut,
+                    )
+                    .on_toggle(Message::StartMenuShortcut),
+                )
+                .control(
+                    checkbox("Create desktop shortcut", config.create_desktop_shortcut)
+                        .on_toggle(Message::StartMenuShortcut),
+                )
+                .on_next_maybe((!self.selecting_path).then(|| Message::Next))
+                .on_back(Message::Back)
+                .into(),
+        }
     }
 }

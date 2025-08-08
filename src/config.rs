@@ -7,6 +7,8 @@ pub use manifest::AppManifest;
 pub struct InstallConfig {
     pub install_path: PathBuf,
     pub payloads: Vec<FilePayload>,
+    pub create_start_menu_shortcut: bool,
+    pub create_desktop_shortcut: bool,
 }
 
 pub enum FilePayload {

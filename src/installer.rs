@@ -34,7 +34,7 @@ where
         if let Some(config) = self.wizard.unattended_install() {
             // Perform unattended installation using the provided config
             let runtime = tokio::runtime::Runtime::new().unwrap();
-            let name = self.manifest.name.clone();
+            let name = self.manifest.friendly_name.clone();
             let install_result =
                 runtime.block_on(async { install_unattended(config, self.manifest).await });
             match install_result {
@@ -74,7 +74,7 @@ async fn install_unattended(
             .expect("Fixed template can't fail")
             .progress_chars("##-"),
         )
-        .with_message(format!("Installing {}", manifest.name));
+        .with_message(format!("Installing {}", manifest.friendly_name));
 
     bar.enable_steady_tick(Duration::from_millis(100));
 
@@ -128,7 +128,7 @@ pub(crate) fn install<Output>(
 async fn inner_install(
     sender: mpsc::Sender<f32>,
     config: InstallConfig,
-    _manifest: AppManifest,
+    manifest: AppManifest,
 ) -> Result<(), InstallError> {
     tokio::task::spawn_blocking(move || {
         fs::create_dir_all(&config.install_path).map_err(InstallError::CreateInstallDir)?;
@@ -194,10 +194,14 @@ async fn inner_install(
             }
         }
 
+        let mut bin_path = config.install_path.clone();
+        bin_path.push(&manifest.bin_name);
+
         #[cfg(target_os = "windows")]
         {
-            set_registry_keys(&_manifest, &config.install_path, written)
+            set_registry_keys(&manifest, &config.install_path, written)
                 .map_err(InstallError::RegistryError)?;
+            if config.create_start_menu_shortcut {}
         }
 
         sender.blocking_send(1.0).unwrap();
@@ -215,7 +219,7 @@ fn set_registry_keys(
     size: u64,
 ) -> Result<(), windows_result::Error> {
     let name_for_path = manifest
-        .name
+        .friendly_name
         .chars()
         .filter(|c| c.is_alphanumeric())
         .collect::<String>();
@@ -224,7 +228,7 @@ fn set_registry_keys(
         name_for_path
     );
     let key = windows_registry::LOCAL_MACHINE.create(&registry_path)?;
-    key.set_string("DisplayName", &manifest.name)?;
+    key.set_string("DisplayName", &manifest.friendly_name)?;
     key.set_string("DisplayVersion", &manifest.version)?;
     key.set_string(
         "InstallLocation",

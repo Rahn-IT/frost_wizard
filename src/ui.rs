@@ -134,7 +134,7 @@ where
 
             return Scaffold::new()
                 .title(row![
-                    text(&self.manifest.name).size(24),
+                    text(&self.manifest.friendly_name).size(24),
                     horizontal_space(),
                     text(&self.manifest.version).size(24)
                 ])
@@ -146,10 +146,10 @@ where
 
         match &self.step {
             InstallerStep::Introduction => Scaffold::new()
-                .title(row![text(&self.manifest.name).size(24), horizontal_space(), text(&self.manifest.version).size(24)])
+                .title(row![text(&self.manifest.friendly_name).size(24), horizontal_space(), text(&self.manifest.version).size(24)])
                 .control(text(format!(
                     "Welcome to the installation wizard for {}!",
-                    self.manifest.name
+                    self.manifest.friendly_name
                 )))
                 .control(text("This wizard will guide your through the installation process and help you keep a cool head."))
                 .on_next(Message::Next)
@@ -159,10 +159,10 @@ where
             },
             InstallerStep::Installing => {
                 Scaffold::new()
-                                .title(row![text(&self.manifest.name).size(24), horizontal_space(), text(&self.manifest.version).size(24)])
+                                .title(row![text(&self.manifest.friendly_name).size(24), horizontal_space(), text(&self.manifest.version).size(24)])
                                 .control(text(format!(
                                     "Installing {}!",
-                                    self.manifest.name
+                                    self.manifest.friendly_name
                                 )))
                                 .control(progress_bar(0.0..=1.0, self.progress))
                                 .control(text(format!("{:.0}%", self.progress * 100.0)))
@@ -171,10 +171,10 @@ where
             },
             InstallerStep::Completed =>
             Scaffold::new()
-                            .title(row![text(&self.manifest.name).size(24), horizontal_space(), text(&self.manifest.version).size(24)])
+                            .title(row![text(&self.manifest.friendly_name).size(24), horizontal_space(), text(&self.manifest.version).size(24)])
                             .control(text(format!(
                                 "{} installed successfully!",
-                                self.manifest.name
+                                self.manifest.friendly_name
                             )))
                             .on_finish(Message::Finish)
                             .into()

@@ -1,17 +1,18 @@
 #![windows_subsystem = "windows"]
-use std::
-    io::Read
-;
+use std::io::Read;
+#[cfg(windows)]
+use std::path::PathBuf;
 use thiserror::Error;
 
 use frost_wizard::{
-    config::FilePayload, installer_creator::{create_installer, EmbeddedConfig}, post_embed::{search_for_embedded_data, EmbeddedReader}, windows::{attach, attach_and_ensure_admin, elevated, restart_with_admin_prompt}, wizard::basic::BasicWizard
+    config::FilePayload,
+    installer_creator::{EmbeddedConfig, create_installer},
+    post_embed::{EmbeddedReader, search_for_embedded_data},
+    windows::{attach, attach_and_ensure_admin},
+    wizard::basic::BasicWizard,
 };
 
-
 fn main() {
-
-
     if let Some(embedded_reader) =
         search_for_embedded_data().expect("Error while checking for embedded data")
     {
@@ -53,9 +54,15 @@ fn start_installer_from_embedded_data(
 
     reader.move_start_to_current();
 
+    #[cfg(windows)]
+    let mut default_install_path = PathBuf::from("C:\\Program Files");
+    #[cfg(unix)]
+    let mut default_install_path = PathBuf::from("/opt");
+    default_install_path.push(&config.manifest.bin_name);
+
     BasicWizard::builder()
         .manifest(config.manifest)
-        .default_install_path(config.default_install_path)
+        .default_install_path(default_install_path)
         .add_payload(FilePayload::Directory {
             unpacked_size: config.unpacked_size,
             reader: Box::new(reader),

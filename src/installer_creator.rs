@@ -59,22 +59,16 @@ struct Metadata {
 #[derive(Deserialize, Clone, Debug)]
 struct WizardMetadata {
     friendly_name: Option<String>,
-    default_install_path: Option<PathBuf>,
 }
 
 impl Metadata {
     fn friendly_name(&self) -> Option<String> {
         self.frost_wizard.as_ref()?.friendly_name.clone()
     }
-
-    fn default_install_path(&self) -> Option<PathBuf> {
-        self.frost_wizard.as_ref()?.default_install_path.clone()
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EmbeddedConfig {
-    pub default_install_path: PathBuf,
     pub manifest: AppManifest,
     pub unpacked_size: u64,
 }
@@ -143,12 +137,6 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
                 .map(Metadata::friendly_name)
                 .flatten()
                 .unwrap_or(bin_name.clone());
-            let default_install_path = metadata
-                .as_ref()
-                .map(Metadata::default_install_path)
-                .flatten()
-                // TODO: generate install path from bin name
-                .unwrap_or_else(|| PathBuf::from("/home/acul/test"));
 
             let mut search_path = cargo_manifest_path
                 .parent()
@@ -184,10 +172,11 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
             #[cfg(windows)]
             let bin_size = bin_file.metadata()?.file_size();
 
-
             let embedded_config = EmbeddedConfig {
-                default_install_path,
-                manifest: AppManifest::build().name(friendly_name).version(version),
+                manifest: AppManifest::build()
+                    .friendly_name(friendly_name)
+                    .bin_name(bin_name.clone())
+                    .version(version),
                 unpacked_size: bin_size,
             };
 

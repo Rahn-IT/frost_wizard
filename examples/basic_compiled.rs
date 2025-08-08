@@ -5,7 +5,8 @@ fn main() {
         .default_install_path("/home/acul/test")
         .manifest(
             AppManifest::build()
-                .name("test")
+                .friendly_name("test")
+                .bin_name("test")
                 .version("0.1.0")
                 .publisher("Rahn-IT"),
         )
