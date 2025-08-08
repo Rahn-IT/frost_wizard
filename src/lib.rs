@@ -4,3 +4,4 @@ pub mod installer_creator;
 pub mod post_embed;
 mod ui;
 pub mod wizard;
+pub mod windows;

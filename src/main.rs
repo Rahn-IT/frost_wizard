@@ -1,27 +1,28 @@
 #![windows_subsystem = "windows"]
-use std::io::Read;
+use std::
+    io::Read
+;
 use thiserror::Error;
 
 use frost_wizard::{
-    config::FilePayload,
-    installer_creator::{EmbeddedConfig, create_installer},
-    post_embed::{EmbeddedReader, search_for_embedded_data},
-    wizard::basic::BasicWizard,
+    config::FilePayload, installer_creator::{create_installer, EmbeddedConfig}, post_embed::{search_for_embedded_data, EmbeddedReader}, windows::{attach, attach_and_ensure_admin, elevated, restart_with_admin_prompt}, wizard::basic::BasicWizard
 };
 
-use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 
 fn main() {
-    let _attach_result = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+
+
     if let Some(embedded_reader) =
         search_for_embedded_data().expect("Error while checking for embedded data")
     {
+        attach_and_ensure_admin();
         if let Err(err) = start_installer_from_embedded_data(embedded_reader) {
             eprintln!("Error while running installer: {}", err);
             std::process::exit(1);
         }
         std::process::exit(0);
     } else {
+        let _ = attach();
         if let Err(err) = create_installer() {
             eprintln!("Error creating installer: {}", err);
             std::process::exit(1);
