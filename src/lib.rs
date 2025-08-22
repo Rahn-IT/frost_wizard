@@ -1,7 +1,9 @@
 pub mod config;
 mod installer;
 pub mod installer_creator;
+pub mod link_file;
 pub mod post_embed;
 mod ui;
-pub mod wizard;
+#[cfg(windows)]
 pub mod windows;
+pub mod wizard;

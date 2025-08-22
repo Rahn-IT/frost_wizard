@@ -1,14 +1,14 @@
 #![windows_subsystem = "windows"]
 use std::io::Read;
-#[cfg(windows)]
 use std::path::PathBuf;
 use thiserror::Error;
 
+#[cfg(windows)]
+use frost_wizard::windows::{attach, attach_and_ensure_admin};
 use frost_wizard::{
     config::FilePayload,
     installer_creator::{EmbeddedConfig, create_installer},
     post_embed::{EmbeddedReader, search_for_embedded_data},
-    windows::{attach, attach_and_ensure_admin},
     wizard::basic::BasicWizard,
 };
 
@@ -16,6 +16,7 @@ fn main() {
     if let Some(embedded_reader) =
         search_for_embedded_data().expect("Error while checking for embedded data")
     {
+        #[cfg(windows)]
         attach_and_ensure_admin();
         if let Err(err) = start_installer_from_embedded_data(embedded_reader) {
             eprintln!("Error while running installer: {}", err);
@@ -23,6 +24,7 @@ fn main() {
         }
         std::process::exit(0);
     } else {
+        #[cfg(windows)]
         let _ = attach();
         if let Err(err) = create_installer() {
             eprintln!("Error creating installer: {}", err);
