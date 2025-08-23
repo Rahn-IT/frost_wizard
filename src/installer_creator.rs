@@ -4,7 +4,7 @@ use std::os::unix::fs::MetadataExt;
 use std::os::windows::fs::MetadataExt;
 use std::{
     fs::File,
-    io::{BufReader, Write},
+    io::{BufReader, Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -50,6 +50,14 @@ enum Command {
         #[arg(short = 'm', long = "manifest", default_value = "./Cargo.toml")]
         cargo_manifest_path: PathBuf,
     },
+    LinkTest {
+        #[arg()]
+        target: PathBuf,
+    },
+    Hexdump {
+        #[arg()]
+        target: PathBuf,
+    },
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -77,6 +85,21 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
     let args = Args::parse();
 
     match args.command {
+        Command::Hexdump { target } => {
+            let mut file = File::open(target.as_path()).unwrap();
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+            println!("{:x?}", buffer);
+            println!("{}", String::from_utf8_lossy(&buffer));
+            std::process::exit(0);
+        }
+        Command::LinkTest { target } => {
+            let mut file = File::create("./linktest.lnk").unwrap();
+            crate::link_file::write_link(&mut file, target.as_path()).unwrap();
+            file.flush().unwrap();
+            drop(file);
+            std::process::exit(0);
+        }
         Command::Cargo {
             installer_name,
             cargo_manifest_path,

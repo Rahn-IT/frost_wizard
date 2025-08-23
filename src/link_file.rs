@@ -32,7 +32,10 @@ fn write_header(writer: &mut impl Write) -> Result<(), io::Error> {
     // HeaderSize
     writer.write_u32::<LE>(0x4c)?;
     // LinkCLSID
-    writer.write_u128::<LE>(0x0002140100000000C000000000000046)?;
+    writer.write_u32::<LE>(0x21401)?;
+    writer.write_u32::<LE>(0x0)?;
+    writer.write_u32::<LE>(0xc0)?;
+    writer.write_u32::<LE>(0x46000000)?;
     // LinkFlags
     writer.write_u32::<LE>(
         LinkFlags::HAS_LINK_TARGET_ID_LIST
@@ -85,14 +88,16 @@ fn write_header(writer: &mut impl Write) -> Result<(), io::Error> {
 fn write_target_id_list(writer: &mut impl Write, target: &Path) -> Result<(), io::Error> {
     let mut buffer = Vec::new();
 
-    let root = "computer";
-    buffer.write_u16::<LE>(root.len() as u16)?;
-    buffer.write_all(root.as_bytes())?;
-    for component in target.components() {
-        let stringified = component.as_os_str();
-        buffer.write_u16::<LE>(stringified.len() as u16)?;
-        buffer.write_all(stringified.as_encoded_bytes())?;
+    let string = target.as_os_str().to_string_lossy();
+    let mut component_buffer = Vec::new();
+    let uft16: Vec<u16> = string.encode_utf16().collect();
+    component_buffer.write_u16::<LE>((uft16.len() * 2) as u16)?;
+    for char in uft16 {
+        component_buffer.write_u16::<LE>(char)?;
     }
+    println!("Component Buffer: {:x?}", component_buffer);
+    buffer.write_all(&component_buffer)?;
+    drop(component_buffer);
 
     // TerminalID
     buffer.write_u16::<LE>(0)?;
@@ -107,7 +112,7 @@ bitflags! {
     /// The LinkFlags structure defines bits that specify which shell link structures are present in the file
     /// format after the ShellLinkHeader structure (section 2.1).
     #[derive(Debug, Clone)]
-    pub struct LinkFlags: u32 {
+    struct LinkFlags: u32 {
         /// The shell link is saved with an item ID list (IDList). If this bit is set, a
         /// LinkTargetIDList structure (section 2.2) MUST follow the ShellLinkHeader.
         /// If this bit is not set, this structure MUST NOT be present.
@@ -232,7 +237,7 @@ bitflags! {
     /// the target would be inefficient. It is possible for the target items attributes to be out of sync with this
     /// value.
     #[derive(Debug, Clone)]
-    pub struct FileAttributeFlags: u32 {
+    struct FileAttributeFlags: u32 {
         /// The file or directory is read-only. For a file, if this bit is set, applications can read the file but cannot write to it or delete it. For a directory, if this bit is set, applications cannot delete the directory.
         const FILE_ATTRIBUTE_READONLY               = 0b1000_0000_0000_0000_0000_0000_0000_0000;
 
