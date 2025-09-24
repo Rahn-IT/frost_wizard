@@ -54,6 +54,10 @@ enum Command {
         #[arg()]
         target: PathBuf,
     },
+    LinkRead {
+        #[arg()]
+        target: PathBuf,
+    },
     Hexdump {
         #[arg()]
         target: PathBuf,
@@ -98,6 +102,14 @@ pub fn create_installer() -> Result<(), CreateInstallerError> {
             crate::link_file::write_link(&mut file, target.as_path()).unwrap();
             file.flush().unwrap();
             drop(file);
+            std::process::exit(0);
+        }
+        Command::LinkRead { target } => {
+            let mut file = File::open(target.as_path()).unwrap();
+            match crate::lnk::Lnk::parse(&mut file) {
+                Ok(lnk) => println!("{:#?}", lnk),
+                Err(err) => eprintln!("Failed to parse link file:\n{}", err),
+            }
             std::process::exit(0);
         }
         Command::Cargo {
