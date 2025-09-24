@@ -12,7 +12,7 @@ use std::{
 
 pub fn write_link(writer: &mut impl Write, target: &Path) -> Result<(), io::Error> {
     write_header(writer)?;
-    write_target_id_list(writer, target)?;
+    write_target_id_list_mistral(writer, target)?;
 
     Ok(())
 }
@@ -81,6 +81,54 @@ fn write_header(writer: &mut impl Write) -> Result<(), io::Error> {
 
     // Reserved 3
     writer.write_u32::<LE>(0)?;
+
+    Ok(())
+}
+
+fn write_target_id_list_mistral(writer: &mut impl Write, target: &Path) -> Result<(), io::Error> {
+    let mut buffer = Vec::new();
+
+    // For local files, the IDList should start with a root folder (e.g., My Computer)
+    // Root folder (My Computer)
+    buffer.write_u16::<LE>(0x001F)?;  // Size of this item (31 bytes)
+    buffer.write_u8(0x20)?;           // Type: PT_GUID (0x20)
+    buffer.write_u8(0x00)?;           // Flags
+    buffer.write_all(&[0x20, 0xD0, 0x4F, 0xE0, 0x3A, 0xEA, 0x10, 0x69, 0xA2, 0xD8, 0x08, 0x00, 0x2B, 0x30, 0x30, 0x9D])?;  // CLSID for My Computer
+
+    // Drive item (e.g., C:)
+    if let Some(drive) = target.components().next() {
+        let drive_letter = drive.as_os_str().to_string_lossy();
+        let drive_item = format!("{}:", drive_letter);
+        let mut drive_buffer = Vec::new();
+        drive_buffer.write_u16::<LE>((drive_item.len() + 1) as u16 * 2)?;  // Size in bytes (including null terminator)
+        drive_buffer.write_u8(0x31)?;  // Type: PT_DRIVE (0x31)
+        drive_buffer.write_u8(0x00)?;  // Flags
+        for c in drive_item.encode_utf16() {
+            drive_buffer.write_u16::<LE>(c)?;
+        }
+        drive_buffer.write_u16::<LE>(0x0000)?;  // Null terminator
+        buffer.write_all(&drive_buffer)?;
+    }
+
+    // Path components
+    for component in target.components().skip(1) {
+        let component_str = component.as_os_str().to_string_lossy();
+        let mut component_buffer = Vec::new();
+        component_buffer.write_u16::<LE>((component_str.len() + 1) as u16 * 2)?;  // Size in bytes (including null terminator)
+        component_buffer.write_u8(0x31)?;  // Type: PT_DRIVE (0x31) - This might need to be adjusted based on whether it's a file or directory
+        component_buffer.write_u8(0x00)?;  // Flags
+        for c in component_str.encode_utf16() {
+            component_buffer.write_u16::<LE>(c)?;
+        }
+        component_buffer.write_u16::<LE>(0x0000)?;  // Null terminator
+        buffer.write_all(&component_buffer)?;
+    }
+
+    // Terminal ID
+    buffer.write_u16::<LE>(0x0000)?;
+
+    writer.write_u16::<LE>(buffer.len() as u16)?;
+    writer.write_all(&buffer)?;
 
     Ok(())
 }
