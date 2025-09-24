@@ -65,7 +65,7 @@ fn write_header(writer: &mut impl Write) -> Result<(), io::Error> {
     // FileSize
     writer.write_u32::<LE>(file_size)?;
     // IconIndex
-    writer.write_u64::<LE>(0)?;
+    writer.write_u32::<LE>(0)?;
 
     // ShowCommand
     writer.write_u32::<LE>(ShowCommand::Normal as u32)?;
