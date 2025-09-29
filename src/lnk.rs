@@ -4,20 +4,17 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
 use std::{
     collections::VecDeque,
     io::{self, Read},
+    path::PathBuf,
 };
+
+use crate::lnk::id_list::IdList;
+
+mod id_list;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LnkParseError {
     #[error("I/O error: {0}")]
     IoError(#[from] io::Error),
-    #[error("UTF-16 error: {0}")]
-    Utf16Error(#[from] std::string::FromUtf16Error),
-    #[error("UTF-8 error: {0}")]
-    Utf8Error(#[from] std::string::FromUtf8Error),
-    #[error("Invalid DOS date: {0}-{1}-{2}")]
-    InvalidDosDate(u16, u16, u16),
-    #[error("Invalid DOS time: {0}:{1}:{2}")]
-    InvalidDosTime(u16, u16, u16),
     #[error("Invalid Windows DateTime: {0}")]
     InvalidWindowsDateTime(u64),
     #[error("Invalid signature")]
@@ -30,8 +27,8 @@ pub enum LnkParseError {
     InvalidFileFlags(u32),
     #[error("Invalid show command {0}")]
     InvalidShowCommand(u32),
-    #[error("Invalid ID list")]
-    InvalidIdList,
+    #[error("error while parsing id list: {0}")]
+    IdListError(#[from] id_list::IdListParseError),
 }
 
 #[derive(Debug)]
@@ -44,6 +41,7 @@ pub struct Lnk {
     file_size: u32,
     icon_index: i32,
     show_command: ShowCommand,
+    id_list: Option<IdList>,
 }
 
 impl Lnk {
@@ -61,12 +59,10 @@ impl Lnk {
         }
 
         let link_flags = read_flags(data)?;
-        println!("Link Flags: {link_flags:08b}");
         let link_flags = LinkFlags::from_bits(link_flags)
             .ok_or_else(|| LnkParseError::InvalidLinkFlags(link_flags))?;
 
         let file_flags = read_flags(data)?;
-        println!("File Flags: {file_flags:08b}");
         let file_flags = FileAttributeFlags::from_bits(file_flags)
             .ok_or_else(|| LnkParseError::InvalidFileFlags(file_flags))?;
 
@@ -83,9 +79,11 @@ impl Lnk {
         let _reserved2 = read_u32(data)?;
         let _reserved3 = read_u32(data)?;
 
-        if link_flags.contains(LinkFlags::HAS_LINK_TARGET_ID_LIST) {
-            read_target_id_list(data)?;
-        }
+        let id_list = if link_flags.contains(LinkFlags::HAS_LINK_TARGET_ID_LIST) {
+            Some(IdList::parse(data)?)
+        } else {
+            None
+        };
 
         Ok(Self {
             link_flags,
@@ -96,6 +94,7 @@ impl Lnk {
             file_size,
             icon_index,
             show_command,
+            id_list,
         })
     }
 }
@@ -109,28 +108,34 @@ fn read_byte(data: &mut impl Read) -> io::Result<u8> {
     data.read_u8()
 }
 
+#[must_use]
 fn read_u16(data: &mut impl Read) -> io::Result<u16> {
     data.read_u16::<LE>()
 }
 
+#[must_use]
 fn read_u32(data: &mut impl Read) -> io::Result<u32> {
     data.read_u32::<LE>()
 }
 
+#[must_use]
 fn read_i32(data: &mut impl Read) -> io::Result<i32> {
     data.read_i32::<LE>()
 }
 
+#[must_use]
 fn read_flags(data: &mut impl Read) -> io::Result<u32> {
     data.read_u32::<BE>()
 }
 
+#[must_use]
 fn read_u64(data: &mut impl Read) -> io::Result<u64> {
     data.read_u64::<LE>()
 }
 
 const WINDOWS_EPOCH: u64 = 11644473600;
 
+#[must_use]
 fn read_windows_datetime(data: &mut impl Read) -> Result<NaiveDateTime, LnkParseError> {
     let windows_timestamp = read_u64(data)?;
     let unix_timestamp = windows_timestamp / 10_000_000 - WINDOWS_EPOCH;
@@ -141,147 +146,18 @@ fn read_windows_datetime(data: &mut impl Read) -> Result<NaiveDateTime, LnkParse
     Ok(datetime.naive_utc())
 }
 
-pub struct IdList {
-    pub root: Option<Vec<u8>>,
-    pub items: Vec<Vec<u8>>,
+#[derive(Debug, thiserror::Error)]
+pub enum StringReadError {
+    #[error("I/O error: {0}")]
+    IoError(#[from] io::Error),
+    #[error("UTF-16 error: {0}")]
+    Utf16Error(#[from] std::string::FromUtf16Error),
+    #[error("UTF-8 error: {0}")]
+    Utf8Error(#[from] std::string::FromUtf8Error),
 }
 
-fn read_target_id_list(data: &mut impl Read) -> Result<Vec<u8>, LnkParseError> {
-    let size = read_u16(data)?;
-    println!("id list size: {}", size);
-    let list_data = &mut data.take(size as u64);
-    let mut list = VecDeque::new();
-
-    loop {
-        let item_length = read_u16(list_data)?;
-        if item_length == 0 {
-            break;
-        }
-        let item_length = item_length as usize - 2;
-        println!("Item length: {}", item_length);
-        let mut item_data = vec![0u8; item_length];
-        list_data.read_exact(&mut item_data)?;
-        println!("Item: {:0x?}", item_data);
-        println!(
-            "Item String: {}",
-            String::from_utf8_lossy(item_data.as_slice())
-        );
-        list.push_back(item_data);
-    }
-
-    let Some(first) = list.front() else {
-        return Err(LnkParseError::InvalidIdList);
-    };
-
-    let Some(first_marker) = first.first() else {
-        return Err(LnkParseError::InvalidIdList);
-    };
-
-    let mut path = Vec::new();
-
-    let root = if *first_marker == 0x1f {
-        if let Some(root) = RootLocationType::from_binary_guid(&first[2..]) {
-            list.pop_front();
-            match root {
-                RootLocationType::MyComputer => {
-                    let Some(next) = list.front() else {
-                        return Err(LnkParseError::InvalidIdList);
-                    };
-                    if next.starts_with(&[0x17]) {
-                        if next.len() == 23 {
-                            path.push(String::from_utf8(next[2..].to_vec())?);
-                            list.pop_front();
-                        } else {
-                            todo!("Drive");
-                        }
-                        // Known root folder
-                    } else if !next.starts_with(&[0x2e, 0x80]) {
-                        return Err(LnkParseError::InvalidIdList);
-                    }
-                }
-                RootLocationType::NetworkPlaces => unimplemented!(),
-                _ => (),
-            }
-            Some(root)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    println!("Root: {:?}", root);
-    println!("Path: {:?}", path);
-
-    todo!()
-}
-
-#[derive(Debug)]
-pub enum RootLocationType {
-    MyComputer,
-    MyDocuments,
-    NetworkShare,
-    NetworkServer,
-    NetworkPlaces,
-    NetworkDomain,
-    Internet,
-    RecycleBin,
-    ControlPanel,
-    User,
-    UwpApps,
-}
-
-impl RootLocationType {
-    fn from_text_guid(guid: &[u8]) -> Option<Self> {
-        match guid {
-            b"{20D04FE0-3AEA-1069-A2D8-08002B30309D}" => Some(Self::MyComputer),
-            b"{450D8FBA-AD25-11D0-98A8-0800361B1103}" => Some(Self::MyDocuments),
-            b"{54a754c0-4bf1-11d1-83ee-00a0c90dc849}" => Some(Self::NetworkShare),
-            b"{c0542a90-4bf0-11d1-83ee-00a0c90dc849}" => Some(Self::NetworkServer),
-            b"{208D2C60-3AEA-1069-A2D7-08002B30309D}" => Some(Self::NetworkPlaces),
-            b"{46e06680-4bf0-11d1-83ee-00a0c90dc849}" => Some(Self::NetworkDomain),
-            b"{871C5380-42A0-1069-A2EA-08002B30309D}" => Some(Self::Internet),
-            b"{645FF040-5081-101B-9F08-00AA002F954E}" => Some(Self::RecycleBin),
-            b"{21EC2020-3AEA-1069-A2DD-08002B30309D}" => Some(Self::ControlPanel),
-            b"{59031A47-3F72-44A7-89C5-5595FE6B30EE}" => Some(Self::User),
-            b"{4234D49B-0245-4DF3-B780-3893943456E1}" => Some(Self::UwpApps),
-            _ => None,
-        }
-    }
-
-    fn from_binary_guid(guid: &[u8]) -> Option<Self> {
-        if guid.len() != 16 {
-            return None;
-        }
-        let ordered = [
-            guid[3], guid[2], guid[1], guid[0], guid[5], guid[4], guid[7], guid[6], guid[8],
-            guid[9], guid[10], guid[11], guid[12], guid[13], guid[14], guid[15],
-        ];
-        let guid = format!(
-            "{{{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
-            ordered[0],
-            ordered[1],
-            ordered[2],
-            ordered[3],
-            ordered[4],
-            ordered[5],
-            ordered[6],
-            ordered[7],
-            ordered[8],
-            ordered[9],
-            ordered[10],
-            ordered[11],
-            ordered[12],
-            ordered[13],
-            ordered[14],
-            ordered[15]
-        );
-
-        Self::from_text_guid(guid.as_bytes())
-    }
-}
-
-fn read_c_utf16(data: &mut impl Read) -> Result<String, LnkParseError> {
+#[must_use]
+fn read_c_utf16(data: &mut impl Read) -> Result<String, StringReadError> {
     let mut encoded_string = Vec::new();
     loop {
         let short = read_u16(data)?;
@@ -295,7 +171,8 @@ fn read_c_utf16(data: &mut impl Read) -> Result<String, LnkParseError> {
     Ok(decoded_string)
 }
 
-fn read_c_utf8(data: &mut impl Read, padding: bool) -> Result<String, LnkParseError> {
+#[must_use]
+fn read_c_utf8(data: &mut impl Read, padding: bool) -> Result<String, StringReadError> {
     let mut encoded_string = Vec::new();
     loop {
         let byte = read_byte(data)?;
@@ -305,9 +182,8 @@ fn read_c_utf8(data: &mut impl Read, padding: bool) -> Result<String, LnkParseEr
         encoded_string.push(byte);
     }
 
-    if padding && encoded_string.len() % 2 == 1 {
-        let byte = read_byte(data)?;
-        encoded_string.push(byte);
+    if padding && encoded_string.len() % 2 == 0 {
+        let _padding = read_byte(data)?;
     }
 
     let decoded_string = String::from_utf8(encoded_string)?;
@@ -315,24 +191,37 @@ fn read_c_utf8(data: &mut impl Read, padding: bool) -> Result<String, LnkParseEr
 }
 
 fn get_bits(short: u16, start: u8, length: u8) -> u16 {
-    (short >> start) & ((1 << length) - 1)
+    let mask = (1 << length) - 1;
+    let shifted = short >> start;
+    let result = shifted & mask;
+    result
 }
 
-fn read_dos_datetime(data: &mut impl Read) -> Result<NaiveDateTime, LnkParseError> {
+#[derive(Debug, thiserror::Error)]
+pub enum DosDateTimeReadError {
+    #[error("I/O error: {0}")]
+    IoError(#[from] io::Error),
+    #[error("Invalid DOS date: {0}-{1}-{2}")]
+    InvalidDosDate(u16, u16, u16),
+    #[error("Invalid DOS time: {0}:{1}:{2}")]
+    InvalidDosTime(u16, u16, u16),
+}
+
+fn read_dos_datetime(data: &mut impl Read) -> Result<NaiveDateTime, DosDateTimeReadError> {
     let date = read_u16(data)?;
     let time = read_u16(data)?;
-    let year = get_bits(date, 0, 7);
-    let month = get_bits(date, 8, 4).max(1);
-    let day = get_bits(date, 11, 5);
-    let hour = get_bits(time, 0, 5);
+    let year = get_bits(date, 9, 7) + 1980;
+    let month = get_bits(date, 5, 4).max(1);
+    let day = get_bits(date, 0, 5).max(1);
+    let hour = get_bits(time, 11, 5);
     let minute = get_bits(time, 5, 6);
-    let second = get_bits(time, 11, 5);
+    let second = get_bits(time, 0, 5);
 
     let date = NaiveDate::from_ymd_opt(year as i32, month as u32, day as u32)
-        .ok_or_else(|| LnkParseError::InvalidDosDate(year, month, day))?;
+        .ok_or_else(|| DosDateTimeReadError::InvalidDosDate(year, month, day))?;
 
     let time = NaiveTime::from_hms_opt(hour as u32, minute as u32, second as u32)
-        .ok_or_else(|| LnkParseError::InvalidDosTime(hour, minute, second))?;
+        .ok_or_else(|| DosDateTimeReadError::InvalidDosTime(hour, minute, second))?;
 
     Ok(NaiveDateTime::new(date, time))
 }
