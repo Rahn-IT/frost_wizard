@@ -3,7 +3,8 @@ use std::io::{self, Read};
 use chrono::NaiveDateTime;
 
 use crate::lnk::{
-    read_byte, read_c_utf8, read_c_utf16, read_dos_datetime, read_u16, read_u32, read_u64,
+    LnkParseError, read_byte, read_c_utf8, read_c_utf16, read_dos_datetime, read_u16, read_u32,
+    read_u64,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -40,6 +41,8 @@ pub enum IdListParseError {
     InvalidAfterFolder,
     #[error("entry after file is not allowed")]
     AnyAfterFile,
+    #[error("not all bytes read - not fully parsed")]
+    BytesLeft,
 }
 
 #[derive(Debug)]
@@ -102,6 +105,12 @@ impl IdList {
             None => return Err(IdListParseError::ListEmpty),
             Some(IdEntry::Root(_)) => return Err(IdListParseError::MissingDrive),
             _ => (),
+        }
+
+        let mut left = Vec::new();
+        let read = list_data.read_to_end(&mut left)?;
+        if read != 0 {
+            return Err(IdListParseError::BytesLeft);
         }
 
         Ok(Self { id_list })
@@ -194,10 +203,12 @@ impl IdEntry {
                     localized_name: None,
                 };
 
-                let _extra_size = read_u16(data)?;
+                let extra_size = read_u16(data)?;
                 let extra_version = read_u16(data)?;
                 let extra_signature = read_u32(data)?;
                 if extra_signature == 0xbeef0004 {
+                    let mut data = data.take(extra_size as u64);
+                    let data = &mut data;
                     entry_data.created = Some(read_dos_datetime(data)?);
                     entry_data.accessed = Some(read_dos_datetime(data)?);
                     let _offset_unicode = read_u16(data)?;
@@ -228,6 +239,12 @@ impl IdEntry {
                             entry_data.localized_name = Some(localized)
                         }
                         let _version_offset = read_u16(data)?;
+                    }
+
+                    let mut left = Vec::new();
+                    let read = data.read_to_end(&mut left)?;
+                    if read != 0 {
+                        return Err(IdListParseError::BytesLeft);
                     }
                 }
 

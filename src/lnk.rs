@@ -29,6 +29,8 @@ pub enum LnkParseError {
     InvalidShowCommand(u32),
     #[error("error while parsing id list: {0}")]
     IdListError(#[from] id_list::IdListParseError),
+    #[error("error reading string: {0}")]
+    StringReadError(#[from] StringReadError),
 }
 
 #[derive(Debug)]
@@ -42,6 +44,11 @@ pub struct Lnk {
     icon_index: i32,
     show_command: ShowCommand,
     id_list: Option<IdList>,
+    name: Option<String>,
+    relative_path: Option<String>,
+    working_dir: Option<String>,
+    arguments: Option<String>,
+    icon_location: Option<String>,
 }
 
 impl Lnk {
@@ -61,6 +68,8 @@ impl Lnk {
         let link_flags = read_flags(data)?;
         let link_flags = LinkFlags::from_bits(link_flags)
             .ok_or_else(|| LnkParseError::InvalidLinkFlags(link_flags))?;
+
+        println!("link_flags: {link_flags:?}");
 
         let file_flags = read_flags(data)?;
         let file_flags = FileAttributeFlags::from_bits(file_flags)
@@ -85,6 +94,49 @@ impl Lnk {
             None
         };
 
+        if link_flags.contains(LinkFlags::HAS_LINK_INFO) {
+            todo!()
+        }
+
+        let utf16 = link_flags.contains(LinkFlags::IS_UNICODE);
+        println!("utf16: {utf16}");
+
+        let name = if link_flags.contains(LinkFlags::HAS_NAME) {
+            Some(read_sized_string(data, utf16)?)
+        } else {
+            None
+        };
+
+        println!("name: {name:?}");
+
+        let relative_path = if link_flags.contains(LinkFlags::HAS_RELATIVE_PATH) {
+            Some(read_sized_string(data, utf16)?)
+        } else {
+            None
+        };
+        println!("relative_path: {relative_path:?}");
+
+        let working_dir = if link_flags.contains(LinkFlags::HAS_WORKING_DIR) {
+            Some(read_sized_string(data, utf16)?)
+        } else {
+            None
+        };
+        println!("working_dir: {working_dir:?}");
+
+        let arguments = if link_flags.contains(LinkFlags::HAS_ARGUMENTS) {
+            Some(read_sized_string(data, utf16)?)
+        } else {
+            None
+        };
+        println!("arguments: {arguments:?}");
+
+        let icon_location = if link_flags.contains(LinkFlags::HAS_ICON_LOCATION) {
+            Some(read_sized_string(data, utf16)?)
+        } else {
+            None
+        };
+        println!("icon_location: {icon_location:?}");
+
         Ok(Self {
             link_flags,
             file_flags,
@@ -95,6 +147,11 @@ impl Lnk {
             icon_index,
             show_command,
             id_list,
+            name,
+            relative_path,
+            working_dir,
+            arguments,
+            icon_location,
         })
     }
 }
@@ -156,6 +213,29 @@ pub enum StringReadError {
     Utf8Error(#[from] std::string::FromUtf8Error),
 }
 
+fn read_sized_string(data: &mut impl Read, utf16: bool) -> Result<String, StringReadError> {
+    if utf16 {
+        read_sized_utf16(data)
+    } else {
+        read_sized_utf8(data)
+    }
+}
+
+#[must_use]
+fn read_sized_utf16(data: &mut impl Read) -> Result<String, StringReadError> {
+    let size = read_u16(data)? as usize;
+    let mut raw_string = vec![0u8; size * 2];
+    data.read_exact(&mut raw_string)?;
+    let mut iter = raw_string.into_iter();
+    let mut utf16 = Vec::with_capacity(size);
+    while let Some((byte1, byte2)) = iter.next().zip(iter.next()) {
+        let short = u16::from_le_bytes([byte1, byte2]);
+        utf16.push(short);
+    }
+
+    Ok(String::from_utf16(&utf16)?)
+}
+
 #[must_use]
 fn read_c_utf16(data: &mut impl Read) -> Result<String, StringReadError> {
     let mut encoded_string = Vec::new();
@@ -169,6 +249,14 @@ fn read_c_utf16(data: &mut impl Read) -> Result<String, StringReadError> {
 
     let decoded_string = String::from_utf16(&encoded_string)?;
     Ok(decoded_string)
+}
+
+#[must_use]
+fn read_sized_utf8(data: &mut impl Read) -> Result<String, StringReadError> {
+    let size = read_u16(data)?;
+    let mut raw_string = vec![0u8; size as usize];
+    data.read_exact(&mut raw_string)?;
+    Ok(String::from_utf8(raw_string)?)
 }
 
 #[must_use]
