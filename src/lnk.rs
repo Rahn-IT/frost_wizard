@@ -7,9 +7,10 @@ use std::{
     path::PathBuf,
 };
 
-use crate::lnk::id_list::IdList;
+use crate::lnk::{id_list::IdList, link_info::LinkInfo};
 
 mod id_list;
+mod link_info;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LnkParseError {
@@ -29,6 +30,8 @@ pub enum LnkParseError {
     InvalidShowCommand(u32),
     #[error("error while parsing id list: {0}")]
     IdListError(#[from] id_list::IdListParseError),
+    #[error("error while parsing link info: {0}")]
+    LinkInfoError(#[from] link_info::LinkInfoParseError),
     #[error("error reading string: {0}")]
     StringReadError(#[from] StringReadError),
 }
@@ -44,6 +47,7 @@ pub struct Lnk {
     icon_index: i32,
     show_command: ShowCommand,
     id_list: Option<IdList>,
+    link_info: Option<LinkInfo>,
     name: Option<String>,
     relative_path: Option<String>,
     working_dir: Option<String>,
@@ -65,14 +69,14 @@ impl Lnk {
             return Err(LnkParseError::InvalidGuid);
         }
 
-        let link_flags = read_flags(data)?;
+        let link_flags = read_u32(data)?;
         println!("link_flags: {link_flags:032b}");
         let link_flags = LinkFlags::from_bits(link_flags)
             .ok_or_else(|| LnkParseError::InvalidLinkFlags(link_flags))?;
 
         println!("link_flags: {link_flags:?}");
 
-        let file_flags = read_flags(data)?;
+        let file_flags = read_u32(data)?;
         let file_flags = FileAttributeFlags::from_bits(file_flags)
             .ok_or_else(|| LnkParseError::InvalidFileFlags(file_flags))?;
 
@@ -95,9 +99,13 @@ impl Lnk {
             None
         };
 
-        if link_flags.contains(LinkFlags::HAS_LINK_INFO) {
-            todo!()
-        }
+        let link_info = if link_flags.contains(LinkFlags::HAS_LINK_INFO)
+            && !link_flags.contains(LinkFlags::FORCE_NO_LINK_INFO)
+        {
+            Some(LinkInfo::parse(data)?)
+        } else {
+            None
+        };
 
         let utf16 = link_flags.contains(LinkFlags::IS_UNICODE);
         println!("utf16: {utf16}");
@@ -148,6 +156,7 @@ impl Lnk {
             icon_index,
             show_command,
             id_list,
+            link_info,
             name,
             relative_path,
             working_dir,
@@ -179,11 +188,6 @@ fn read_u32(data: &mut impl Read) -> io::Result<u32> {
 #[must_use]
 fn read_i32(data: &mut impl Read) -> io::Result<i32> {
     data.read_i32::<LE>()
-}
-
-#[must_use]
-fn read_flags(data: &mut impl Read) -> io::Result<u32> {
-    data.read_u32::<LE>()
 }
 
 #[must_use]
