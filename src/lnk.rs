@@ -1,14 +1,19 @@
 use bitflags::bitflags;
-use byteorder::{BE, LE, ReadBytesExt};
-use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
-use std::{
-    collections::VecDeque,
-    io::{self, Read},
-    path::PathBuf,
+use chrono::NaiveDateTime;
+use std::io::{self, Read};
+
+use crate::lnk::{
+    console_data_block::{ConsoleDataBlock, ConsoleDataBlockParseError},
+    helpers::{
+        StringReadError, WindowsDateTimeError, read_i32, read_sized_string, read_u16, read_u32,
+        read_windows_datetime,
+    },
+    id_list::IdList,
+    link_info::LinkInfo,
 };
 
-use crate::lnk::{id_list::IdList, link_info::LinkInfo};
-
+mod console_data_block;
+mod helpers;
 mod id_list;
 mod link_info;
 
@@ -16,8 +21,8 @@ mod link_info;
 pub enum LnkParseError {
     #[error("I/O error: {0}")]
     IoError(#[from] io::Error),
-    #[error("Invalid Windows DateTime: {0}")]
-    InvalidWindowsDateTime(u64),
+    #[error("Error reading Windows DateTime: {0}")]
+    WindowsDateTimeError(#[from] WindowsDateTimeError),
     #[error("Invalid signature")]
     InvalidSignature,
     #[error("Invalid GUID")]
@@ -34,6 +39,12 @@ pub enum LnkParseError {
     LinkInfoError(#[from] link_info::LinkInfoParseError),
     #[error("error reading string: {0}")]
     StringReadError(#[from] StringReadError),
+    #[error("unknown data block signature: {0:08x}")]
+    UnknownDataBlockSignature(u32),
+    #[error("unparsed data")]
+    UnparsedData,
+    #[error("error while parsing console data block: {0}")]
+    ConsoleDataBlockError(#[from] ConsoleDataBlockParseError),
 }
 
 #[derive(Debug)]
@@ -53,6 +64,7 @@ pub struct Lnk {
     working_dir: Option<String>,
     arguments: Option<String>,
     icon_location: Option<String>,
+    terminal_data: Option<ConsoleDataBlock>,
 }
 
 impl Lnk {
@@ -146,7 +158,7 @@ impl Lnk {
         };
         println!("icon_location: {icon_location:?}");
 
-        Ok(Self {
+        let mut lnk = Self {
             link_flags,
             file_flags,
             creation_time,
@@ -162,7 +174,74 @@ impl Lnk {
             working_dir,
             arguments,
             icon_location,
-        })
+            terminal_data: None,
+        };
+
+        loop {
+            let block_size = read_u32(data)?;
+            if block_size <= 0x4 {
+                // Termination Block
+                break;
+            }
+            let signature = read_u32(data)?;
+            let signature = BlockSignature::from_u32(signature)
+                .ok_or_else(|| LnkParseError::UnknownDataBlockSignature(signature))?;
+            let mut block_data = data.take(block_size as u64 - 8);
+            println!("signature: {signature:?}");
+
+            match signature {
+                BlockSignature::ConsoleDataBlock => {
+                    let console_data_block = ConsoleDataBlock::parse(&mut block_data)?;
+                    lnk.terminal_data = Some(console_data_block);
+                }
+                _ => todo!(),
+            };
+
+            let mut remaining_data = Vec::new();
+            block_data.read_to_end(&mut remaining_data)?;
+            // println!("remaining_data: {remaining_data:?}");
+        }
+
+        let mut remaining_data = Vec::new();
+        if data.read_to_end(&mut remaining_data)? > 0 {
+            return Err(LnkParseError::UnparsedData);
+        }
+
+        Ok(lnk)
+    }
+}
+
+#[derive(Debug)]
+pub enum BlockSignature {
+    ConsoleDataBlock,
+    ConsoleFEDataBlock,
+    DarwinDataBlock,
+    EnvironmentVariableDataBlock,
+    IconEnvironmentDataBlock,
+    KnownFolderDataBlock,
+    PropertyStoreDataBlock,
+    ShimDataBlock,
+    SpecialFolderDataBlock,
+    TrackerDataBlock,
+    VistaAndAboveIDListDataBlock,
+}
+
+impl BlockSignature {
+    pub fn from_u32(value: u32) -> Option<Self> {
+        match value {
+            0xA0000002 => Some(BlockSignature::ConsoleDataBlock),
+            0xA0000004 => Some(BlockSignature::ConsoleFEDataBlock),
+            0xA0000006 => Some(BlockSignature::DarwinDataBlock),
+            0xA0000001 => Some(BlockSignature::EnvironmentVariableDataBlock),
+            0xA0000007 => Some(BlockSignature::IconEnvironmentDataBlock),
+            0xA000000B => Some(BlockSignature::KnownFolderDataBlock),
+            0xA0000009 => Some(BlockSignature::PropertyStoreDataBlock),
+            0xA0000008 => Some(BlockSignature::ShimDataBlock),
+            0xA0000005 => Some(BlockSignature::SpecialFolderDataBlock),
+            0xA0000003 => Some(BlockSignature::TrackerDataBlock),
+            0xA000000C => Some(BlockSignature::VistaAndAboveIDListDataBlock),
+            _ => None,
+        }
     }
 }
 
@@ -170,154 +249,6 @@ const SIGNATURE: &[u8] = b"L\x00\x00\x00";
 const GUID: &[u8] = b"\x01\x14\x02\x00\x00\x00\x00\x00\xc0\x00\x00\x00\x00\x00\x00F";
 const LINK_INFO_HEADER_DEFAULT: u8 = 0x1C;
 const LINK_INFO_HEADER_OPTIONAL: u8 = 0x24;
-
-fn read_byte(data: &mut impl Read) -> io::Result<u8> {
-    data.read_u8()
-}
-
-#[must_use]
-fn read_u16(data: &mut impl Read) -> io::Result<u16> {
-    data.read_u16::<LE>()
-}
-
-#[must_use]
-fn read_u32(data: &mut impl Read) -> io::Result<u32> {
-    data.read_u32::<LE>()
-}
-
-#[must_use]
-fn read_i32(data: &mut impl Read) -> io::Result<i32> {
-    data.read_i32::<LE>()
-}
-
-#[must_use]
-fn read_u64(data: &mut impl Read) -> io::Result<u64> {
-    data.read_u64::<LE>()
-}
-
-const WINDOWS_EPOCH: u64 = 11644473600;
-
-#[must_use]
-fn read_windows_datetime(data: &mut impl Read) -> Result<NaiveDateTime, LnkParseError> {
-    let windows_timestamp = read_u64(data)?;
-    let unix_timestamp = windows_timestamp / 10_000_000 - WINDOWS_EPOCH;
-
-    let datetime = DateTime::from_timestamp(unix_timestamp as i64, 0)
-        .ok_or_else(|| LnkParseError::InvalidWindowsDateTime(windows_timestamp))?;
-
-    Ok(datetime.naive_utc())
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum StringReadError {
-    #[error("I/O error: {0}")]
-    IoError(#[from] io::Error),
-    #[error("UTF-16 error: {0}")]
-    Utf16Error(#[from] std::string::FromUtf16Error),
-    #[error("UTF-8 error: {0}")]
-    Utf8Error(#[from] std::string::FromUtf8Error),
-}
-
-fn read_sized_string(data: &mut impl Read, utf16: bool) -> Result<String, StringReadError> {
-    if utf16 {
-        read_sized_utf16(data)
-    } else {
-        read_sized_utf8(data)
-    }
-}
-
-#[must_use]
-fn read_sized_utf16(data: &mut impl Read) -> Result<String, StringReadError> {
-    let size = read_u16(data)? as usize;
-    let mut raw_string = vec![0u8; size * 2];
-    data.read_exact(&mut raw_string)?;
-    let mut iter = raw_string.into_iter();
-    let mut utf16 = Vec::with_capacity(size);
-    while let Some((byte1, byte2)) = iter.next().zip(iter.next()) {
-        let short = u16::from_le_bytes([byte1, byte2]);
-        utf16.push(short);
-    }
-
-    Ok(String::from_utf16(&utf16)?)
-}
-
-#[must_use]
-fn read_c_utf16(data: &mut impl Read) -> Result<String, StringReadError> {
-    let mut encoded_string = Vec::new();
-    loop {
-        let short = read_u16(data)?;
-        if short == 0 {
-            break;
-        }
-        encoded_string.push(short);
-    }
-
-    let decoded_string = String::from_utf16(&encoded_string)?;
-    Ok(decoded_string)
-}
-
-#[must_use]
-fn read_sized_utf8(data: &mut impl Read) -> Result<String, StringReadError> {
-    let size = read_u16(data)?;
-    let mut raw_string = vec![0u8; size as usize];
-    data.read_exact(&mut raw_string)?;
-    Ok(String::from_utf8(raw_string)?)
-}
-
-#[must_use]
-fn read_c_utf8(data: &mut impl Read, padding: bool) -> Result<String, StringReadError> {
-    let mut encoded_string = Vec::new();
-    loop {
-        let byte = read_byte(data)?;
-        if byte == 0 {
-            break;
-        }
-        encoded_string.push(byte);
-    }
-
-    if padding && encoded_string.len() % 2 == 0 {
-        let _padding = read_byte(data)?;
-    }
-
-    let decoded_string = String::from_utf8(encoded_string)?;
-    Ok(decoded_string)
-}
-
-fn get_bits(short: u16, start: u8, length: u8) -> u16 {
-    let mask = (1 << length) - 1;
-    let shifted = short >> start;
-    let result = shifted & mask;
-    result
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum DosDateTimeReadError {
-    #[error("I/O error: {0}")]
-    IoError(#[from] io::Error),
-    #[error("Invalid DOS date: {0}-{1}-{2}")]
-    InvalidDosDate(u16, u16, u16),
-    #[error("Invalid DOS time: {0}:{1}:{2}")]
-    InvalidDosTime(u16, u16, u16),
-}
-
-fn read_dos_datetime(data: &mut impl Read) -> Result<NaiveDateTime, DosDateTimeReadError> {
-    let date = read_u16(data)?;
-    let time = read_u16(data)?;
-    let year = get_bits(date, 9, 7) + 1980;
-    let month = get_bits(date, 5, 4).max(1);
-    let day = get_bits(date, 0, 5).max(1);
-    let hour = get_bits(time, 11, 5);
-    let minute = get_bits(time, 5, 6);
-    let second = get_bits(time, 0, 5);
-
-    let date = NaiveDate::from_ymd_opt(year as i32, month as u32, day as u32)
-        .ok_or_else(|| DosDateTimeReadError::InvalidDosDate(year, month, day))?;
-
-    let time = NaiveTime::from_hms_opt(hour as u32, minute as u32, second as u32)
-        .ok_or_else(|| DosDateTimeReadError::InvalidDosTime(hour, minute, second))?;
-
-    Ok(NaiveDateTime::new(date, time))
-}
 
 #[derive(Debug, Clone)]
 enum ShowCommand {

@@ -3,8 +3,11 @@ use std::io::{self, Read};
 use chrono::NaiveDateTime;
 
 use crate::lnk::{
-    LnkParseError, read_byte, read_c_utf8, read_c_utf16, read_dos_datetime, read_u16, read_u32,
-    read_u64,
+    LnkParseError,
+    helpers::{
+        DosDateTimeReadError, StringReadError, read_byte, read_c_utf8, read_c_utf16,
+        read_dos_datetime, read_u16, read_u32, read_u64,
+    },
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -32,9 +35,9 @@ pub enum IdListParseError {
     #[error("entry type not supported yet")]
     UnsupportedEntryType,
     #[error("error reading string: {0}")]
-    StringReadError(#[from] super::StringReadError),
+    StringReadError(#[from] StringReadError),
     #[error("error reading DOS datetime: {0}")]
-    DosTimeError(#[from] super::DosDateTimeReadError),
+    DosTimeError(#[from] DosDateTimeReadError),
     #[error("invalid type after drive")]
     InvalidAfterDrive,
     #[error("invalid type after folder")]
