@@ -8,6 +8,7 @@ use crate::lnk::{
         StringReadError, WindowsDateTimeError, read_i32, read_sized_string, read_u16, read_u32,
         read_windows_datetime,
     },
+    icon_environment::{IconEnvironmentDataBlock, IconEnvironmentDataBlockParseError},
     id_list::IdList,
     link_info::LinkInfo,
     property_store::PropertyStore,
@@ -16,6 +17,7 @@ use crate::lnk::{
 
 mod console_data_block;
 mod helpers;
+mod icon_environment;
 mod id_list;
 mod link_info;
 mod property_store;
@@ -53,6 +55,8 @@ pub enum LnkParseError {
     TrackerDataBlockError(#[from] TrackerDataBlockParseError),
     #[error("error while parsing property store data block: {0}")]
     PropertyStoreDataBlockError(#[from] property_store::PropertyStoreDataBlockParseError),
+    #[error("error while parsing icon environment data block: {0}")]
+    IconEnvironmentDataBlockerror(#[from] IconEnvironmentDataBlockParseError),
 }
 
 #[derive(Debug)]
@@ -74,6 +78,7 @@ pub struct Lnk {
     icon_location: Option<String>,
     terminal_data: Option<ConsoleDataBlock>,
     tracker_data: Option<TrackerDataBlock>,
+    icon_environment: Option<IconEnvironmentDataBlock>,
     property_store: PropertyStore,
 }
 
@@ -186,6 +191,7 @@ impl Lnk {
             icon_location,
             terminal_data: None,
             tracker_data: None,
+            icon_environment: None,
             property_store: PropertyStore::default(),
         };
 
@@ -212,6 +218,10 @@ impl Lnk {
                 }
                 BlockSignature::PropertyStoreDataBlock => {
                     lnk.property_store.parse(&mut block_data)?
+                }
+                BlockSignature::IconEnvironmentDataBlock => {
+                    let icon_environment = IconEnvironmentDataBlock::parse(&mut block_data)?;
+                    lnk.icon_environment = Some(icon_environment);
                 }
                 _ => todo!(),
             };

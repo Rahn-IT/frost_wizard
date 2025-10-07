@@ -11,12 +11,13 @@ use crate::lnk::{
         read_u32, read_u64, read_windows_datetime,
     },
     property_store::{
-        app_user_model_properties::AppUserModelProperties,
+        app_user_model_properties::AppUserModelProperties, link_properties::LinkProperties,
         system_basic_properties::SystemBasicProperties,
     },
 };
 
 mod app_user_model_properties;
+mod link_properties;
 mod system_basic_properties;
 
 #[derive(Debug, Error)]
@@ -45,15 +46,17 @@ pub enum PropValue {
     WindowsDateTime(NaiveDateTime),
     U64(u64),
     Bool(bool),
+    Guid(Guid),
 }
 
 /// One Serialized Property Storage (the only thing LNK embeds for this block).
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct PropertyStore {
     pub unparsed_id_values: HashMap<Guid, HashMap<u32, PropValue>>,
     pub unparsed_name_values: HashMap<String, PropValue>,
     pub app_user_model: Option<AppUserModelProperties>,
     pub system_basic: Option<SystemBasicProperties>,
+    pub link_properties: Option<LinkProperties>,
 }
 
 impl Default for PropertyStore {
@@ -63,6 +66,7 @@ impl Default for PropertyStore {
             unparsed_name_values: Default::default(),
             app_user_model: None,
             system_basic: None,
+            link_properties: None,
         }
     }
 }
@@ -129,10 +133,16 @@ impl PropertyStore {
 
         match format_id.to_string().as_str() {
             "9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3" => {
+                println!("App user model");
                 self.app_user_model = Some(AppUserModelProperties::from_raw(properties)?);
             }
             "B725F130-47EF-101A-A5F1-02608C9EEBAC" => {
+                println!("System Basic Properties");
                 self.system_basic = Some(SystemBasicProperties::from_raw(properties)?);
+            }
+            "446D16B1-8DAD-4870-A748-402EA43D788C" => {
+                println!("Link Properties");
+                self.link_properties = Some(LinkProperties::from_raw(properties)?)
             }
             _ => {
                 let map = properties.into_iter().collect();
@@ -163,10 +173,14 @@ fn parse_typed_property_value(buf: Vec<u8>) -> Result<PropValue, PropertyStoreDa
             Ok(PropValue::Bool(value != 0))
         }
 
-        0x001F => {
+        0x001F | 0x0008 => {
             // VT_LPWSTR -> UnicodeString: Length (u32 chars incl. NUL), then UTF-16LE bytes, padded to 4
-            let len_chars = read_u32(&mut cur)? as usize;
-            let byte_len = len_chars.saturating_mul(2);
+            let length = read_u32(&mut cur)? as usize;
+            let byte_len = if property_type == 0x01F {
+                length.saturating_mul(2)
+            } else {
+                length
+            };
             let mut bytes = vec![0u8; byte_len];
             cur.read_exact(&mut bytes)?;
 
@@ -193,6 +207,11 @@ fn parse_typed_property_value(buf: Vec<u8>) -> Result<PropValue, PropertyStoreDa
             // VT_UI8 -> U64
             let v = read_u64(&mut cur)?;
             Ok(PropValue::U64(v))
+        }
+
+        0x0048 => {
+            let guid = read_guid(&mut cur)?;
+            Ok(PropValue::Guid(guid))
         }
 
         _ => {

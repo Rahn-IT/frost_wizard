@@ -25,6 +25,8 @@ impl AppUserModelProperties {
         let mut me = Self::default();
 
         for (pid, value) in properties {
+            println!("PID: {pid}");
+            println!("Value: {value:?}");
             match pid {
                 // PID 5 – System.AppUserModel.ID (VT_LPWSTR)
                 5 => match value {
