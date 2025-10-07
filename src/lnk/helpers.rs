@@ -161,7 +161,7 @@ pub fn read_dos_datetime(data: &mut impl Read) -> Result<NaiveDateTime, DosDateT
     Ok(NaiveDateTime::new(date, time))
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Guid {
     pub data1: u32,
     pub data2: u16,

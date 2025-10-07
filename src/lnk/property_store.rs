@@ -1,17 +1,23 @@
 use chrono::NaiveDateTime;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     io::{self, Cursor, Read},
 };
 use thiserror::Error;
 
 use crate::lnk::{
-    GUID,
     helpers::{
         Guid, StringReadError, WindowsDateTimeError, read_c_utf16, read_guid, read_u8, read_u16,
         read_u32, read_u64, read_windows_datetime,
     },
+    property_store::{
+        app_user_model_properties::AppUserModelProperties,
+        system_basic_properties::SystemBasicProperties,
+    },
 };
+
+mod app_user_model_properties;
+mod system_basic_properties;
 
 #[derive(Debug, Error)]
 pub enum PropertyStoreDataBlockParseError {
@@ -27,6 +33,8 @@ pub enum PropertyStoreDataBlockParseError {
     WindowsDateTime(#[from] WindowsDateTimeError),
     #[error("wrong property type")]
     WrongPropertyType,
+    #[error("unknown property id: {0}")]
+    UnknownPropertyId(u32),
 }
 
 /// Raw typed value payload (verbatim [MS-OLEPS] TypedPropertyValue bytes).
@@ -42,29 +50,19 @@ pub enum PropValue {
 /// One Serialized Property Storage (the only thing LNK embeds for this block).
 #[derive(Debug, Clone)]
 pub struct PropertyStore {
-    pub unparsed_id_values: BTreeMap<u32, PropValue>,
-    pub unparsed_name_values: BTreeMap<String, PropValue>,
-    pub item_type_text: Option<String>,
-    pub app_user_model_id: Option<String>,
-    pub item_name_display: Option<String>,
-    pub dual_mode: Option<bool>,
-    pub size: Option<u64>,
-    pub date_modified: Option<NaiveDateTime>,
-    pub date_created: Option<NaiveDateTime>,
+    pub unparsed_id_values: HashMap<Guid, HashMap<u32, PropValue>>,
+    pub unparsed_name_values: HashMap<String, PropValue>,
+    pub app_user_model: Option<AppUserModelProperties>,
+    pub system_basic: Option<SystemBasicProperties>,
 }
 
 impl Default for PropertyStore {
     fn default() -> Self {
         Self {
-            unparsed_id_values: BTreeMap::new(),
-            unparsed_name_values: BTreeMap::new(),
-            item_type_text: None,
-            app_user_model_id: None,
-            item_name_display: None,
-            dual_mode: None,
-            size: None,
-            date_modified: None,
-            date_created: None,
+            unparsed_id_values: Default::default(),
+            unparsed_name_values: Default::default(),
+            app_user_model: None,
+            system_basic: None,
         }
     }
 }
@@ -78,7 +76,6 @@ impl PropertyStore {
             return Err(PropertyStoreDataBlockParseError::InvalidVersion(version));
         }
         let format_id = read_guid(r)?;
-        let format_id_string = format_id.to_string();
 
         // Names are UTF-16 strings only for this special Format ID (FMTID_Storage)
         const FMTID_STORAGE: Guid = Guid {
@@ -87,6 +84,8 @@ impl PropertyStore {
             data3: 0x101B,
             data4: [0x93, 0x97, 0x08, 0x00, 0x2B, 0x2C, 0xF9, 0xAE],
         };
+
+        let mut properties = Vec::<(u32, PropValue)>::new();
 
         loop {
             // Serialized Property Value — ends with ValueSize == 0
@@ -124,55 +123,20 @@ impl PropertyStore {
                 r.read_exact(&mut tv_bytes)?;
                 let value = parse_typed_property_value(tv_bytes)?;
 
-                match format_id_string.as_str() {
-                    "9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3" => match id {
-                        5 => match value {
-                            PropValue::Unicode(text) => self.app_user_model_id = Some(text),
-                            _ => return Err(PropertyStoreDataBlockParseError::WrongPropertyType),
-                        },
-                        11 => match value {
-                            PropValue::Bool(b) => {
-                                self.dual_mode = Some(b);
-                            }
-                            _ => return Err(PropertyStoreDataBlockParseError::WrongPropertyType),
-                        },
-                        _ => {
-                            self.unparsed_id_values.insert(id, value);
-                        }
-                    },
-                    "B725F130-47EF-101A-A5F1-02608C9EEBAC" => match id {
-                        4 => match value {
-                            PropValue::Unicode(text) => self.item_type_text = Some(text),
-                            _ => return Err(PropertyStoreDataBlockParseError::WrongPropertyType),
-                        },
-                        10 => match value {
-                            PropValue::Unicode(text) => self.item_name_display = Some(text),
-                            _ => return Err(PropertyStoreDataBlockParseError::WrongPropertyType),
-                        },
-                        12 => match value {
-                            PropValue::U64(size) => self.size = Some(size),
-                            _ => return Err(PropertyStoreDataBlockParseError::WrongPropertyType),
-                        },
-                        14 => match value {
-                            PropValue::WindowsDateTime(datetime) => {
-                                self.date_created = Some(datetime)
-                            }
-                            _ => return Err(PropertyStoreDataBlockParseError::WrongPropertyType),
-                        },
-                        15 => match value {
-                            PropValue::WindowsDateTime(datetime) => {
-                                self.date_modified = Some(datetime)
-                            }
-                            _ => return Err(PropertyStoreDataBlockParseError::WrongPropertyType),
-                        },
-                        _ => {
-                            self.unparsed_id_values.insert(id, value);
-                        }
-                    },
-                    _ => {
-                        self.unparsed_id_values.insert(id, value);
-                    }
-                }
+                properties.push((id, value));
+            }
+        }
+
+        match format_id.to_string().as_str() {
+            "9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3" => {
+                self.app_user_model = Some(AppUserModelProperties::from_raw(properties)?);
+            }
+            "B725F130-47EF-101A-A5F1-02608C9EEBAC" => {
+                self.system_basic = Some(SystemBasicProperties::from_raw(properties)?);
+            }
+            _ => {
+                let map = properties.into_iter().collect();
+                self.unparsed_id_values.insert(format_id, map);
             }
         }
 
