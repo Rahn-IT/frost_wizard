@@ -24,9 +24,9 @@ pub enum LinkInfoParseError {
 
 #[derive(Debug)]
 pub struct LinkInfo {
-    volume_id: Option<VolumeId>,
-    local_base_path: Option<String>,
-    common_path_suffix: Option<String>,
+    pub volume_id: Option<VolumeId>,
+    pub local_base_path: Option<String>,
+    pub common_path_suffix: Option<String>,
 }
 
 impl LinkInfo {
@@ -208,9 +208,9 @@ pub enum VolumeIdParseError {
 
 #[derive(Debug)]
 pub struct VolumeId {
-    drive_type: DriveType,
-    serial_number: u32,
-    label: String,
+    pub drive_type: DriveType,
+    pub serial_number: u32,
+    pub label: String,
 }
 
 impl VolumeId {

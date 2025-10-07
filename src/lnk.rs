@@ -10,12 +10,16 @@ use crate::lnk::{
     },
     id_list::IdList,
     link_info::LinkInfo,
+    property_store::PropertyStore,
+    tracker_data_block::{TrackerDataBlock, TrackerDataBlockParseError},
 };
 
 mod console_data_block;
 mod helpers;
 mod id_list;
 mod link_info;
+mod property_store;
+mod tracker_data_block;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LnkParseError {
@@ -45,6 +49,10 @@ pub enum LnkParseError {
     UnparsedData,
     #[error("error while parsing console data block: {0}")]
     ConsoleDataBlockError(#[from] ConsoleDataBlockParseError),
+    #[error("error while parsing tracker data block: {0}")]
+    TrackerDataBlockError(#[from] TrackerDataBlockParseError),
+    #[error("error while parsing property store data block: {0}")]
+    PropertyStoreDataBlockError(#[from] property_store::PropertyStoreDataBlockParseError),
 }
 
 #[derive(Debug)]
@@ -65,6 +73,8 @@ pub struct Lnk {
     arguments: Option<String>,
     icon_location: Option<String>,
     terminal_data: Option<ConsoleDataBlock>,
+    tracker_data: Option<TrackerDataBlock>,
+    property_store: PropertyStore,
 }
 
 impl Lnk {
@@ -175,6 +185,8 @@ impl Lnk {
             arguments,
             icon_location,
             terminal_data: None,
+            tracker_data: None,
+            property_store: PropertyStore::default(),
         };
 
         loop {
@@ -193,6 +205,13 @@ impl Lnk {
                 BlockSignature::ConsoleDataBlock => {
                     let console_data_block = ConsoleDataBlock::parse(&mut block_data)?;
                     lnk.terminal_data = Some(console_data_block);
+                }
+                BlockSignature::TrackerDataBlock => {
+                    let tracker_data_block = TrackerDataBlock::parse(&mut block_data)?;
+                    lnk.tracker_data = Some(tracker_data_block);
+                }
+                BlockSignature::PropertyStoreDataBlock => {
+                    lnk.property_store.parse(&mut block_data)?
                 }
                 _ => todo!(),
             };

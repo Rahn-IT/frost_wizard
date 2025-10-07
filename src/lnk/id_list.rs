@@ -5,8 +5,8 @@ use chrono::NaiveDateTime;
 use crate::lnk::{
     LnkParseError,
     helpers::{
-        DosDateTimeReadError, StringReadError, read_byte, read_c_utf8, read_c_utf16,
-        read_dos_datetime, read_u16, read_u32, read_u64,
+        DosDateTimeReadError, StringReadError, read_c_utf8, read_c_utf16, read_dos_datetime,
+        read_u8, read_u16, read_u32, read_u64,
     },
 };
 
@@ -141,13 +141,13 @@ pub struct IdEntryData {
 
 impl IdEntry {
     fn parse(data: &mut impl Read) -> Result<Self, IdListParseError> {
-        let first_type_byte = read_byte(data)?;
+        let first_type_byte = read_u8(data)?;
 
         let entry_type = match first_type_byte {
             0x1f => EntryType::RootGuid,
             0x2f => EntryType::Drive,
             _ => {
-                let second_type_byte = read_byte(data)?;
+                let second_type_byte = read_u8(data)?;
                 let type_id = u16::from_le_bytes([first_type_byte, second_type_byte]);
                 EntryType::from_type_id(type_id)
                     .ok_or_else(|| IdListParseError::InvalidEntryType(type_id))?
@@ -156,7 +156,7 @@ impl IdEntry {
 
         match entry_type {
             EntryType::RootGuid => {
-                let _root_index = read_byte(data)?;
+                let _root_index = read_u8(data)?;
                 let mut raw_guid = [0u8; 16];
                 data.read_exact(&mut raw_guid)?;
                 let guid = RootLocationType::from_binary_guid(raw_guid)
@@ -166,16 +166,16 @@ impl IdEntry {
             }
 
             EntryType::Drive => {
-                let letter = read_byte(data)? as char;
+                let letter = read_u8(data)? as char;
 
                 if !letter.is_ascii_uppercase() {
                     return Err(IdListParseError::InvalidDriveEntry);
                 }
 
-                if read_byte(data)? != 0x3a {
+                if read_u8(data)? != 0x3a {
                     return Err(IdListParseError::InvalidDriveEntry);
                 }
-                if read_byte(data)? != 0x5c {
+                if read_u8(data)? != 0x5c {
                     return Err(IdListParseError::InvalidDriveEntry);
                 }
                 let mut junk_data = [0u8; 19];

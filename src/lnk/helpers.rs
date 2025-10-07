@@ -1,8 +1,11 @@
 use byteorder::{BE, LE, ReadBytesExt};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
-use std::io::{self, Read};
+use std::{
+    fmt::Debug,
+    io::{self, Read},
+};
 
-pub fn read_byte(data: &mut impl Read) -> io::Result<u8> {
+pub fn read_u8(data: &mut impl Read) -> io::Result<u8> {
     data.read_u8()
 }
 
@@ -107,7 +110,7 @@ pub fn read_sized_utf8(data: &mut impl Read) -> Result<String, StringReadError> 
 pub fn read_c_utf8(data: &mut impl Read, padding: bool) -> Result<String, StringReadError> {
     let mut encoded_string = Vec::new();
     loop {
-        let byte = read_byte(data)?;
+        let byte = read_u8(data)?;
         if byte == 0 {
             break;
         }
@@ -115,7 +118,7 @@ pub fn read_c_utf8(data: &mut impl Read, padding: bool) -> Result<String, String
     }
 
     if padding && encoded_string.len() % 2 == 0 {
-        let _padding = read_byte(data)?;
+        let _padding = read_u8(data)?;
     }
 
     let decoded_string = String::from_utf8(encoded_string)?;
@@ -156,4 +159,53 @@ pub fn read_dos_datetime(data: &mut impl Read) -> Result<NaiveDateTime, DosDateT
         .ok_or_else(|| DosDateTimeReadError::InvalidDosTime(hour, minute, second))?;
 
     Ok(NaiveDateTime::new(date, time))
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Guid {
+    pub data1: u32,
+    pub data2: u16,
+    pub data3: u16,
+    pub data4: [u8; 8],
+}
+
+impl Debug for Guid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+            self.data1,
+            self.data2,
+            self.data3,
+            self.data4[0],
+            self.data4[1],
+            self.data4[2],
+            self.data4[3],
+            self.data4[4],
+            self.data4[5],
+            self.data4[6],
+            self.data4[7]
+        )
+    }
+}
+
+impl ToString for Guid {
+    fn to_string(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
+pub fn read_guid(data: &mut impl Read) -> Result<Guid, io::Error> {
+    let data1 = read_u32(data)?;
+    let data2 = read_u16(data)?;
+    let data3 = read_u16(data)?;
+    let mut data4 = [0u8; 8];
+    data.read_exact(&mut data4)?;
+
+    Ok(Guid {
+        data1,
+        data2,
+        data3,
+        data4,
+    })
 }
