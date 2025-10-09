@@ -1,12 +1,16 @@
-use byteorder::{BE, LE, ReadBytesExt};
+use byteorder::{LE, ReadBytesExt, WriteBytesExt};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
 use std::{
     fmt::Debug,
-    io::{self, Read},
+    io::{self, Read, Write},
 };
 
 pub fn read_u8(data: &mut impl Read) -> io::Result<u8> {
     data.read_u8()
+}
+
+pub fn write_u8(data: &mut impl Write, value: u8) -> io::Result<()> {
+    data.write_u8(value)
 }
 
 #[must_use]
@@ -15,8 +19,18 @@ pub fn read_u16(data: &mut impl Read) -> io::Result<u16> {
 }
 
 #[must_use]
+pub fn write_u16(data: &mut impl Write, value: u16) -> io::Result<()> {
+    data.write_u16::<LE>(value)
+}
+
+#[must_use]
 pub fn read_u32(data: &mut impl Read) -> io::Result<u32> {
     data.read_u32::<LE>()
+}
+
+#[must_use]
+pub fn write_u32(data: &mut impl Write, value: u32) -> io::Result<()> {
+    data.write_u32::<LE>(value)
 }
 
 #[must_use]
@@ -25,8 +39,18 @@ pub fn read_i32(data: &mut impl Read) -> io::Result<i32> {
 }
 
 #[must_use]
+pub fn write_i32(data: &mut impl Write, value: i32) -> io::Result<()> {
+    data.write_i32::<LE>(value)
+}
+
+#[must_use]
 pub fn read_u64(data: &mut impl Read) -> io::Result<u64> {
     data.read_u64::<LE>()
+}
+
+#[must_use]
+pub fn write_u64(data: &mut impl Write, value: u64) -> io::Result<()> {
+    data.write_u64::<LE>(value)
 }
 
 const WINDOWS_EPOCH: u64 = 11644473600;
@@ -48,6 +72,13 @@ pub fn read_windows_datetime(data: &mut impl Read) -> Result<NaiveDateTime, Wind
         .ok_or_else(|| WindowsDateTimeError::InvalidTimestamp(windows_timestamp))?;
 
     Ok(datetime.naive_utc())
+}
+
+pub fn write_windows_datetime(data: &mut impl Write, datetime: NaiveDateTime) -> io::Result<()> {
+    let unix_timestamp = datetime.and_utc().timestamp() as u64 + WINDOWS_EPOCH;
+    let windows_timestamp = unix_timestamp * 10_000_000;
+
+    write_u64(data, windows_timestamp)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -96,6 +127,26 @@ pub fn read_c_utf16(data: &mut impl Read) -> Result<String, StringReadError> {
 
     let decoded_string = String::from_utf16(&encoded_string)?;
     Ok(decoded_string)
+}
+
+pub fn write_sized_utf16(data: &mut impl Write, string: &str) -> Result<(), io::Error> {
+    let size = string.chars().count() as u16;
+    write_u16(data, size)?;
+    write_c_utf16(data, string)?;
+    Ok(())
+}
+
+#[must_use]
+pub fn write_c_utf16(data: &mut impl Write, string: &str) -> Result<(), io::Error> {
+    let mut encoded_string: Vec<u8> = string
+        .encode_utf16()
+        .flat_map(|short| short.to_le_bytes())
+        .collect();
+    encoded_string.push(0);
+    encoded_string.push(0);
+
+    data.write_all(&encoded_string)?;
+    Ok(())
 }
 
 #[must_use]

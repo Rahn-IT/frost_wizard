@@ -1,6 +1,6 @@
 use chrono::NaiveDateTime;
 
-use crate::lnk::property_store::{PropValue, PropertyStoreDataBlockParseError};
+use super::{PropValue, PropertyStoreDataBlockParseError};
 
 #[derive(Debug, Clone, Default)]
 pub struct SystemBasicProperties {

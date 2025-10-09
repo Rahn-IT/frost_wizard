@@ -12,14 +12,14 @@ pub enum IconEnvironmentDataBlockParseError {
 }
 
 #[derive(Debug, Clone)]
-pub struct IconEnvironmentDataBlock {
+pub struct IconEnvironment {
     /// Path constructed with environment variables (ANSI/code page), NUL-terminated.
     pub target_ansi: String,
     /// Path constructed with environment variables (Unicode), NUL-terminated.
     pub target_unicode: String,
 }
 
-impl IconEnvironmentDataBlock {
+impl IconEnvironment {
     /// `data` must point right after BlockSize+BlockSignature.
     /// Reads exactly 260 + 520 bytes as per spec.
     pub fn parse(data: &mut impl Read) -> Result<Self, IconEnvironmentDataBlockParseError> {

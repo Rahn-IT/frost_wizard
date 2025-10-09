@@ -1,7 +1,5 @@
-use crate::lnk::{
-    helpers::Guid,
-    property_store::{PropValue, PropertyStoreDataBlockParseError},
-};
+use super::{PropValue, PropertyStoreDataBlockParseError};
+use crate::lnk::helpers::Guid;
 
 #[derive(Debug, Default)]
 pub struct LinkProperties {

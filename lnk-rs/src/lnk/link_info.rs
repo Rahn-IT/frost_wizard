@@ -1,8 +1,11 @@
-use std::io::Read;
+use std::io::{Read, Write};
 
 use bitflags::bitflags;
 
-use crate::lnk::helpers::{StringReadError, read_c_utf8, read_c_utf16, read_u32};
+use crate::lnk::{
+    LnkWriteError,
+    helpers::{StringReadError, read_c_utf8, read_c_utf16, read_u32},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LinkInfoParseError {
@@ -82,6 +85,10 @@ impl LinkInfo {
             local_base_path,
             common_path_suffix,
         })
+    }
+
+    pub(crate) fn write(&self, data: &mut impl Write) -> Result<(), LnkWriteError> {
+        todo!()
     }
 }
 

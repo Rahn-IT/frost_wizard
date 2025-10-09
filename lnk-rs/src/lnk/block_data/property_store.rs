@@ -6,13 +6,13 @@ use std::{
 use thiserror::Error;
 
 use crate::lnk::{
+    block_data::property_store::{
+        app_user_model_properties::AppUserModelProperties, link_properties::LinkProperties,
+        system_basic_properties::SystemBasicProperties,
+    },
     helpers::{
         Guid, StringReadError, WindowsDateTimeError, read_c_utf16, read_guid, read_u8, read_u16,
         read_u32, read_u64, read_windows_datetime,
-    },
-    property_store::{
-        app_user_model_properties::AppUserModelProperties, link_properties::LinkProperties,
-        system_basic_properties::SystemBasicProperties,
     },
 };
 

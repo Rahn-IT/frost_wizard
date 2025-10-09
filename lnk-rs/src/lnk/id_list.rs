@@ -1,9 +1,9 @@
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 
 use chrono::NaiveDateTime;
 
 use crate::lnk::{
-    LnkParseError,
+    LnkParseError, LnkWriteError,
     helpers::{
         DosDateTimeReadError, StringReadError, read_c_utf8, read_c_utf16, read_dos_datetime,
         read_u8, read_u16, read_u32, read_u64,
@@ -117,6 +117,10 @@ impl IdList {
         }
 
         Ok(Self { id_list })
+    }
+
+    pub(crate) fn write(&self, data: &mut impl Write) -> Result<(), LnkWriteError> {
+        todo!()
     }
 }
 

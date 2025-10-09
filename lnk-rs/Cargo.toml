@@ -1,0 +1,11 @@
+[package]
+name = "lnk-rs"
+edition = "2024"
+version.workspace = true
+
+[dependencies]
+thiserror = "2.0.12"
+chrono = "0.4.41"
+bitflags = "2.9.3"
+byteorder = "1.5.0"
+clap = { version = "4.5.48", features = ["derive"] }

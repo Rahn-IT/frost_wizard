@@ -1,31 +1,22 @@
 use bitflags::bitflags;
 use chrono::NaiveDateTime;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 
 use crate::lnk::{
-    console_data_block::{ConsoleDataBlock, ConsoleDataBlockParseError},
+    block_data::BlockData,
     helpers::{
         StringReadError, WindowsDateTimeError, read_i32, read_sized_string, read_u16, read_u32,
-        read_windows_datetime,
+        read_windows_datetime, write_c_utf16, write_i32, write_sized_utf16, write_u16, write_u32,
+        write_windows_datetime,
     },
-    icon_environment::{IconEnvironmentDataBlock, IconEnvironmentDataBlockParseError},
     id_list::IdList,
-    known_folder_data_block::{KnownFolderDataBlock, KnownFolderDataBlockParseError},
     link_info::LinkInfo,
-    property_store::PropertyStore,
-    special_folder_data_block::{SpecialFolderDataBlock, SpecialFolderDataBlockParseError},
-    tracker_data_block::{TrackerDataBlock, TrackerDataBlockParseError},
 };
 
-mod console_data_block;
+mod block_data;
 mod helpers;
-mod icon_environment;
 mod id_list;
-mod known_folder_data_block;
 mod link_info;
-mod property_store;
-mod special_folder_data_block;
-mod tracker_data_block;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LnkParseError {
@@ -49,47 +40,30 @@ pub enum LnkParseError {
     LinkInfoError(#[from] link_info::LinkInfoParseError),
     #[error("error reading string: {0}")]
     StringReadError(#[from] StringReadError),
-    #[error("unknown data block signature: {0:08x}")]
-    UnknownDataBlockSignature(u32),
-    #[error("unparsed data")]
-    UnparsedData,
-    #[error("error while parsing console data block: {0}")]
-    ConsoleDataBlockError(#[from] ConsoleDataBlockParseError),
-    #[error("error while parsing tracker data block: {0}")]
-    TrackerDataBlockError(#[from] TrackerDataBlockParseError),
-    #[error("error while parsing property store data block: {0}")]
-    PropertyStoreDataBlockError(#[from] property_store::PropertyStoreDataBlockParseError),
-    #[error("error while parsing icon environment data block: {0}")]
-    IconEnvironmentDataBlockerror(#[from] IconEnvironmentDataBlockParseError),
-    #[error("error while parsing special folder data block: {0}")]
-    SpecialFolderDataBlockError(#[from] SpecialFolderDataBlockParseError),
-    #[error("error while parsing known folder data block: {0}")]
-    KnownFolderDataBlockError(#[from] KnownFolderDataBlockParseError),
+    #[error("error reading block data: {0}")]
+    BlockDataError(#[from] block_data::BlockDataParseError),
+    #[error("unparsed data left: {0:?}")]
+    RemainingData(Vec<u8>),
 }
 
 #[derive(Debug)]
 pub struct Lnk {
-    link_flags: LinkFlags,
-    file_flags: FileAttributeFlags,
-    creation_time: NaiveDateTime,
-    access_time: NaiveDateTime,
-    modification_time: NaiveDateTime,
-    file_size: u32,
-    icon_index: i32,
-    show_command: ShowCommand,
-    id_list: Option<IdList>,
-    link_info: Option<LinkInfo>,
-    name: Option<String>,
-    relative_path: Option<String>,
-    working_dir: Option<String>,
-    arguments: Option<String>,
-    icon_location: Option<String>,
-    terminal_data: Option<ConsoleDataBlock>,
-    tracker_data: Option<TrackerDataBlock>,
-    icon_environment: Option<IconEnvironmentDataBlock>,
-    special_folder: Option<SpecialFolderDataBlock>,
-    known_folder: Option<KnownFolderDataBlock>,
-    property_store: PropertyStore,
+    pub link_flags: LinkFlags,
+    pub file_flags: FileAttributeFlags,
+    pub creation_time: NaiveDateTime,
+    pub access_time: NaiveDateTime,
+    pub modification_time: NaiveDateTime,
+    pub file_size_lower_bytes: u32,
+    pub icon_index: i32,
+    pub show_command: ShowCommand,
+    pub id_list: Option<IdList>,
+    pub link_info: Option<LinkInfo>,
+    pub name: Option<String>,
+    pub relative_path: Option<String>,
+    pub working_dir: Option<String>,
+    pub arguments: Option<String>,
+    pub icon_location: Option<String>,
+    pub block_data: BlockData,
 }
 
 impl Lnk {
@@ -107,11 +81,8 @@ impl Lnk {
         }
 
         let link_flags = read_u32(data)?;
-        println!("link_flags: {link_flags:032b}");
         let link_flags = LinkFlags::from_bits(link_flags)
             .ok_or_else(|| LnkParseError::InvalidLinkFlags(link_flags))?;
-
-        println!("link_flags: {link_flags:?}");
 
         let file_flags = read_u32(data)?;
         let file_flags = FileAttributeFlags::from_bits(file_flags)
@@ -120,7 +91,7 @@ impl Lnk {
         let creation_time = read_windows_datetime(data)?;
         let access_time = read_windows_datetime(data)?;
         let modification_time = read_windows_datetime(data)?;
-        let file_size = read_u32(data)?;
+        let file_size_lower_bytes = read_u32(data)?;
         let icon_index = read_i32(data)?;
 
         let show_command = ShowCommand::from_u32(read_u32(data)?)?;
@@ -145,7 +116,6 @@ impl Lnk {
         };
 
         let utf16 = link_flags.contains(LinkFlags::IS_UNICODE);
-        println!("utf16: {utf16}");
 
         let name = if link_flags.contains(LinkFlags::HAS_NAME) {
             Some(read_sized_string(data, utf16)?)
@@ -153,43 +123,39 @@ impl Lnk {
             None
         };
 
-        println!("name: {name:?}");
-
         let relative_path = if link_flags.contains(LinkFlags::HAS_RELATIVE_PATH) {
             Some(read_sized_string(data, utf16)?)
         } else {
             None
         };
-        println!("relative_path: {relative_path:?}");
 
         let working_dir = if link_flags.contains(LinkFlags::HAS_WORKING_DIR) {
             Some(read_sized_string(data, utf16)?)
         } else {
             None
         };
-        println!("working_dir: {working_dir:?}");
 
         let arguments = if link_flags.contains(LinkFlags::HAS_ARGUMENTS) {
             Some(read_sized_string(data, utf16)?)
         } else {
             None
         };
-        println!("arguments: {arguments:?}");
 
         let icon_location = if link_flags.contains(LinkFlags::HAS_ICON_LOCATION) {
             Some(read_sized_string(data, utf16)?)
         } else {
             None
         };
-        println!("icon_location: {icon_location:?}");
 
-        let mut lnk = Self {
+        let block_data = BlockData::parse(data)?;
+
+        let lnk = Self {
             link_flags,
             file_flags,
             creation_time,
             access_time,
             modification_time,
-            file_size,
+            file_size_lower_bytes,
             icon_index,
             show_command,
             id_list,
@@ -199,108 +165,100 @@ impl Lnk {
             working_dir,
             arguments,
             icon_location,
-            terminal_data: None,
-            tracker_data: None,
-            icon_environment: None,
-            special_folder: None,
-            known_folder: None,
-            property_store: PropertyStore::default(),
+            block_data,
         };
-
-        loop {
-            let block_size = read_u32(data)?;
-            if block_size <= 0x4 {
-                // Termination Block
-                break;
-            }
-            let signature = read_u32(data)?;
-            let signature = BlockSignature::from_u32(signature)
-                .ok_or_else(|| LnkParseError::UnknownDataBlockSignature(signature))?;
-            let mut block_data = data.take(block_size as u64 - 8);
-            println!("signature: {signature:?}");
-
-            match signature {
-                BlockSignature::ConsoleDataBlock => {
-                    let console_data_block = ConsoleDataBlock::parse(&mut block_data)?;
-                    lnk.terminal_data = Some(console_data_block);
-                }
-                BlockSignature::TrackerDataBlock => {
-                    let tracker_data_block = TrackerDataBlock::parse(&mut block_data)?;
-                    lnk.tracker_data = Some(tracker_data_block);
-                }
-                BlockSignature::PropertyStoreDataBlock => {
-                    lnk.property_store.parse(&mut block_data)?
-                }
-                BlockSignature::IconEnvironmentDataBlock => {
-                    let icon_environment = IconEnvironmentDataBlock::parse(&mut block_data)?;
-                    lnk.icon_environment = Some(icon_environment);
-                }
-                BlockSignature::SpecialFolderDataBlock => {
-                    let special_folder = SpecialFolderDataBlock::parse(&mut block_data)?;
-                    lnk.special_folder = Some(special_folder);
-                }
-                BlockSignature::KnownFolderDataBlock => {
-                    let known_folder = KnownFolderDataBlock::parse(&mut block_data)?;
-                    lnk.known_folder = Some(known_folder);
-                }
-                _ => todo!(),
-            };
-
-            let mut remaining_data = Vec::new();
-            block_data.read_to_end(&mut remaining_data)?;
-            // println!("remaining_data: {remaining_data:?}");
-        }
 
         let mut remaining_data = Vec::new();
         if data.read_to_end(&mut remaining_data)? > 0 {
-            return Err(LnkParseError::UnparsedData);
+            return Err(LnkParseError::RemainingData(remaining_data));
         }
 
         Ok(lnk)
     }
-}
 
-#[derive(Debug)]
-pub enum BlockSignature {
-    ConsoleDataBlock,
-    ConsoleFEDataBlock,
-    DarwinDataBlock,
-    EnvironmentVariableDataBlock,
-    IconEnvironmentDataBlock,
-    KnownFolderDataBlock,
-    PropertyStoreDataBlock,
-    ShimDataBlock,
-    SpecialFolderDataBlock,
-    TrackerDataBlock,
-    VistaAndAboveIDListDataBlock,
-}
+    pub fn write(&self, data: &mut impl Write) -> Result<(), LnkWriteError> {
+        data.write_all(SIGNATURE)?;
+        data.write_all(GUID)?;
 
-impl BlockSignature {
-    pub fn from_u32(value: u32) -> Option<Self> {
-        match value {
-            0xA0000002 => Some(BlockSignature::ConsoleDataBlock),
-            0xA0000004 => Some(BlockSignature::ConsoleFEDataBlock),
-            0xA0000006 => Some(BlockSignature::DarwinDataBlock),
-            0xA0000001 => Some(BlockSignature::EnvironmentVariableDataBlock),
-            0xA0000007 => Some(BlockSignature::IconEnvironmentDataBlock),
-            0xA000000B => Some(BlockSignature::KnownFolderDataBlock),
-            0xA0000009 => Some(BlockSignature::PropertyStoreDataBlock),
-            0xA0000008 => Some(BlockSignature::ShimDataBlock),
-            0xA0000005 => Some(BlockSignature::SpecialFolderDataBlock),
-            0xA0000003 => Some(BlockSignature::TrackerDataBlock),
-            0xA000000C => Some(BlockSignature::VistaAndAboveIDListDataBlock),
-            _ => None,
+        let mut link_flags = self.link_flags.clone();
+        link_flags.insert(LinkFlags::IS_UNICODE);
+        link_flags.set(LinkFlags::HAS_LINK_TARGET_ID_LIST, self.id_list.is_some());
+        link_flags.set(LinkFlags::HAS_NAME, self.name.is_some());
+        link_flags.set(LinkFlags::HAS_RELATIVE_PATH, self.relative_path.is_some());
+        link_flags.set(LinkFlags::HAS_WORKING_DIR, self.working_dir.is_some());
+        link_flags.set(LinkFlags::HAS_ARGUMENTS, self.arguments.is_some());
+        link_flags.set(LinkFlags::HAS_ICON_LOCATION, self.icon_location.is_some());
+        link_flags.set(
+            LinkFlags::HAS_EXP_ICON,
+            self.block_data.icon_environment.is_some(),
+        );
+
+        write_u32(data, link_flags.bits())?;
+        write_u32(data, self.file_flags.bits())?;
+
+        write_windows_datetime(data, self.creation_time)?;
+        write_windows_datetime(data, self.access_time)?;
+        write_windows_datetime(data, self.modification_time)?;
+
+        write_u32(data, self.file_size_lower_bytes)?;
+        write_i32(data, self.icon_index)?;
+
+        write_u32(data, self.show_command.to_u32())?;
+
+        // Hotkey
+        write_u16(data, 0)?;
+        // Reserved 1
+        write_u16(data, 0)?;
+        // Reserved 2
+        write_u16(data, 0)?;
+        // Reserved 3
+        write_u16(data, 0)?;
+
+        if let Some(id_list) = &self.id_list {
+            id_list.write(data)?;
         }
+
+        if let Some(link_info) = &self.link_info {
+            link_info.write(data)?;
+        }
+
+        if let Some(name) = &self.name {
+            write_sized_utf16(data, name)?;
+        }
+
+        if let Some(relative_path) = &self.relative_path {
+            write_sized_utf16(data, relative_path)?;
+        }
+
+        if let Some(working_dir) = &self.working_dir {
+            write_sized_utf16(data, working_dir)?;
+        }
+
+        if let Some(arguments) = &self.arguments {
+            write_sized_utf16(data, arguments)?;
+        }
+
+        if let Some(icon_location) = &self.icon_location {
+            write_sized_utf16(data, icon_location)?;
+        }
+
+        self.block_data.write(data)?;
+
+        Ok(())
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum LnkWriteError {
+    #[error("I/O error: {0}")]
+    Io(#[from] io::Error),
 }
 
 const SIGNATURE: &[u8] = b"L\x00\x00\x00";
 const GUID: &[u8] = b"\x01\x14\x02\x00\x00\x00\x00\x00\xc0\x00\x00\x00\x00\x00\x00F";
-const LINK_INFO_HEADER_DEFAULT: u8 = 0x1C;
-const LINK_INFO_HEADER_OPTIONAL: u8 = 0x24;
 
 #[derive(Debug, Clone)]
-enum ShowCommand {
+pub enum ShowCommand {
     Normal = 1,
     GrabFocus = 3,
     SkipFocus = 7,
@@ -315,13 +273,21 @@ impl ShowCommand {
             _ => Err(LnkParseError::InvalidShowCommand(value)),
         }
     }
+
+    fn to_u32(&self) -> u32 {
+        match self {
+            ShowCommand::Normal => 1,
+            ShowCommand::GrabFocus => 3,
+            ShowCommand::SkipFocus => 7,
+        }
+    }
 }
 
 bitflags! {
     /// The LinkFlags structure defines bits that specify which shell link structures are present in the file
     /// format after the ShellLinkHeader structure (section 2.1).
     #[derive(Debug, Clone)]
-    struct LinkFlags: u32 {
+    pub struct LinkFlags: u32 {
         /// The shell link is saved with an item ID list (IDList). If this bit is set, a
         /// LinkTargetIDList structure (section 2.2) MUST follow the ShellLinkHeader.
         /// If this bit is not set, this structure MUST NOT be present.
@@ -446,7 +412,7 @@ bitflags! {
     /// the target would be inefficient. It is possible for the target items attributes to be out of sync with this
     /// value.
     #[derive(Debug, Clone)]
-    struct FileAttributeFlags: u32 {
+    pub struct FileAttributeFlags: u32 {
         /// The file or directory is read-only. For a file, if this bit is set, applications can read the file but cannot write to it or delete it. For a directory, if this bit is set, applications cannot delete the directory.
         const FILE_ATTRIBUTE_READONLY               = 0b0000_0000_0000_0000_0000_0000_0000_0001;
 

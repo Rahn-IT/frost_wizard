@@ -16,7 +16,7 @@ pub enum ConsoleDataBlockParseError {
 }
 
 #[derive(Debug, Clone)]
-pub struct ConsoleDataBlock {
+pub struct Console {
     pub fill_attributes: u16,
     pub popup_fill_attributes: u16,
     pub screen_buffer_size_x: i16,
@@ -40,7 +40,7 @@ pub struct ConsoleDataBlock {
     pub color_table: [u32; 16],
 }
 
-impl ConsoleDataBlock {
+impl Console {
     pub fn parse(data: &mut impl Read) -> Result<Self, ConsoleDataBlockParseError> {
         // Block header
         let block_size = read_u32(data)?;

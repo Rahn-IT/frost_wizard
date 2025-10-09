@@ -17,7 +17,7 @@ pub enum TrackerDataBlockParseError {
 }
 
 #[derive(Debug, Clone)]
-pub struct TrackerDataBlock {
+pub struct Tracker {
     /// `machine_id_raw` decoded lossily as UTF-8 (up to first NUL).
     pub machine_id: String,
     /// Two GUIDs used by the Link Tracking service.
@@ -26,7 +26,7 @@ pub struct TrackerDataBlock {
     pub droid_birth: (Guid, Guid),
 }
 
-impl TrackerDataBlock {
+impl Tracker {
     pub fn parse(data: &mut impl Read) -> Result<Self, TrackerDataBlockParseError> {
         // Length (MUST be 0x58) and Version (MUST be 0)
         let length = read_u32(data)?;

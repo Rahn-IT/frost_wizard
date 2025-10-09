@@ -12,21 +12,21 @@ pub enum SpecialFolderDataBlockParseError {
 }
 
 #[derive(Debug, Clone)]
-pub struct SpecialFolderDataBlock {
+pub struct SpecialFolder {
     /// Known CSIDL special folder identifier.
-    pub folder: SpecialFolder,
+    pub folder: SpecialFolderType,
     /// Offset into the LinkTargetIDList that, when combined with the folder, locates the item.
     pub offset: u32,
 }
 
-impl SpecialFolderDataBlock {
+impl SpecialFolder {
     /// `data` must point right after BlockSize + BlockSignature.
     /// Reads exactly 8 bytes: SpecialFolderID (u32 LE), Offset (u32 LE).
     pub fn parse(data: &mut impl Read) -> Result<Self, SpecialFolderDataBlockParseError> {
         let id = read_u32(data)?;
         let offset = read_u32(data)?;
 
-        let folder = SpecialFolder::from_id(id)
+        let folder = SpecialFolderType::from_id(id)
             .ok_or(SpecialFolderDataBlockParseError::UnknownSpecialFolder(id))?;
 
         Ok(Self { folder, offset })
@@ -34,7 +34,7 @@ impl SpecialFolderDataBlock {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SpecialFolder {
+pub enum SpecialFolderType {
     Desktop,
     Internet,
     Programs,
@@ -93,7 +93,7 @@ pub enum SpecialFolder {
     ComputersNearMe,
 }
 
-impl SpecialFolder {
+impl SpecialFolderType {
     pub fn from_id(id: u32) -> Option<Self> {
         Some(match id {
             0x0000 => Self::Desktop,

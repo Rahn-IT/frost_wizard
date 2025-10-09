@@ -11,21 +11,21 @@ pub enum KnownFolderDataBlockParseError {
 }
 
 #[derive(Debug, Clone)]
-pub struct KnownFolderDataBlock {
+pub struct KnownFolder {
     /// KNOWNFOLDERID (GUID) identifying the folder.
-    pub folder: KnownFolder,
+    pub folder: KnownFolderType,
     /// Offset into the LinkTargetIDList that, when combined with the folder, locates the item.
     pub offset: u32,
 }
 
-impl KnownFolderDataBlock {
+impl KnownFolder {
     /// `data` must point right after BlockSize + BlockSignature.
     /// Reads exactly: KnownFolderID (16 bytes) + Offset (u32 LE).
     pub fn parse(data: &mut impl Read) -> Result<Self, KnownFolderDataBlockParseError> {
         let guid = read_guid(data)?;
         let offset = read_u32(data)?;
 
-        let folder = KnownFolder::from_guid(&guid)
+        let folder = KnownFolderType::from_guid(&guid)
             .ok_or_else(|| KnownFolderDataBlockParseError::UnknownKnownFolder(guid))?;
 
         Ok(Self { folder, offset })
@@ -34,7 +34,7 @@ impl KnownFolderDataBlock {
 
 /// Well-known folder identifiers (KNOWNFOLDERIDs from Windows)
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum KnownFolder {
+pub enum KnownFolderType {
     Desktop,
     Documents,
     Downloads,
@@ -56,7 +56,7 @@ pub enum KnownFolder {
     Profile,
 }
 
-impl KnownFolder {
+impl KnownFolderType {
     /// Try to map a GUID to a well-known folder constant.
     pub fn from_guid(guid: &Guid) -> Option<Self> {
         match guid.to_string().to_uppercase().as_str() {
