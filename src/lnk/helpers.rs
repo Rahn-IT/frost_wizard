@@ -42,7 +42,7 @@ pub enum WindowsDateTimeError {
 #[must_use]
 pub fn read_windows_datetime(data: &mut impl Read) -> Result<NaiveDateTime, WindowsDateTimeError> {
     let windows_timestamp = read_u64(data)?;
-    let unix_timestamp = windows_timestamp / 10_000_000 - WINDOWS_EPOCH;
+    let unix_timestamp = (windows_timestamp / 10_000_000).saturating_sub(WINDOWS_EPOCH);
 
     let datetime = DateTime::from_timestamp(unix_timestamp as i64, 0)
         .ok_or_else(|| WindowsDateTimeError::InvalidTimestamp(windows_timestamp))?;

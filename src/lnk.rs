@@ -10,8 +10,10 @@ use crate::lnk::{
     },
     icon_environment::{IconEnvironmentDataBlock, IconEnvironmentDataBlockParseError},
     id_list::IdList,
+    known_folder_data_block::{KnownFolderDataBlock, KnownFolderDataBlockParseError},
     link_info::LinkInfo,
     property_store::PropertyStore,
+    special_folder_data_block::{SpecialFolderDataBlock, SpecialFolderDataBlockParseError},
     tracker_data_block::{TrackerDataBlock, TrackerDataBlockParseError},
 };
 
@@ -19,8 +21,10 @@ mod console_data_block;
 mod helpers;
 mod icon_environment;
 mod id_list;
+mod known_folder_data_block;
 mod link_info;
 mod property_store;
+mod special_folder_data_block;
 mod tracker_data_block;
 
 #[derive(Debug, thiserror::Error)]
@@ -57,6 +61,10 @@ pub enum LnkParseError {
     PropertyStoreDataBlockError(#[from] property_store::PropertyStoreDataBlockParseError),
     #[error("error while parsing icon environment data block: {0}")]
     IconEnvironmentDataBlockerror(#[from] IconEnvironmentDataBlockParseError),
+    #[error("error while parsing special folder data block: {0}")]
+    SpecialFolderDataBlockError(#[from] SpecialFolderDataBlockParseError),
+    #[error("error while parsing known folder data block: {0}")]
+    KnownFolderDataBlockError(#[from] KnownFolderDataBlockParseError),
 }
 
 #[derive(Debug)]
@@ -79,6 +87,8 @@ pub struct Lnk {
     terminal_data: Option<ConsoleDataBlock>,
     tracker_data: Option<TrackerDataBlock>,
     icon_environment: Option<IconEnvironmentDataBlock>,
+    special_folder: Option<SpecialFolderDataBlock>,
+    known_folder: Option<KnownFolderDataBlock>,
     property_store: PropertyStore,
 }
 
@@ -192,6 +202,8 @@ impl Lnk {
             terminal_data: None,
             tracker_data: None,
             icon_environment: None,
+            special_folder: None,
+            known_folder: None,
             property_store: PropertyStore::default(),
         };
 
@@ -222,6 +234,14 @@ impl Lnk {
                 BlockSignature::IconEnvironmentDataBlock => {
                     let icon_environment = IconEnvironmentDataBlock::parse(&mut block_data)?;
                     lnk.icon_environment = Some(icon_environment);
+                }
+                BlockSignature::SpecialFolderDataBlock => {
+                    let special_folder = SpecialFolderDataBlock::parse(&mut block_data)?;
+                    lnk.special_folder = Some(special_folder);
+                }
+                BlockSignature::KnownFolderDataBlock => {
+                    let known_folder = KnownFolderDataBlock::parse(&mut block_data)?;
+                    lnk.known_folder = Some(known_folder);
                 }
                 _ => todo!(),
             };
