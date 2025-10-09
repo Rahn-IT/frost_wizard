@@ -1409,10 +1409,7 @@ dependencies = [
 name = "frost_wizard"
 version = "0.1.0"
 dependencies = [
- "bitflags 2.9.3",
- "byteorder",
  "cargo_toml",
- "chrono",
  "clap",
  "embed-resource",
  "iced",
