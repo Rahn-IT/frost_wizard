@@ -1,9 +1,11 @@
 use byteorder::{LE, ReadBytesExt, WriteBytesExt};
-use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use std::{
     fmt::Debug,
     io::{self, Read, Write},
 };
+
+use crate::lnk::LnkWriteError;
 
 pub fn read_u8(data: &mut impl Read) -> io::Result<u8> {
     data.read_u8()
@@ -183,6 +185,12 @@ fn get_bits(short: u16, start: u8, length: u8) -> u16 {
     result
 }
 
+fn set_bits(short: &mut u16, value: u16, start: u8, length: u8) {
+    let mask = (1 << length) - 1;
+    let shifted = value << start;
+    *short = *short & !(mask << start) | shifted;
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum DosDateTimeReadError {
     #[error("I/O error: {0}")]
@@ -210,6 +218,37 @@ pub fn read_dos_datetime(data: &mut impl Read) -> Result<NaiveDateTime, DosDateT
         .ok_or_else(|| DosDateTimeReadError::InvalidDosTime(hour, minute, second))?;
 
     Ok(NaiveDateTime::new(date, time))
+}
+
+pub fn write_dos_datetime(
+    data: &mut impl Write,
+    datetime: NaiveDateTime,
+) -> Result<(), LnkWriteError> {
+    let date = datetime.date();
+    let time = datetime.time();
+
+    let year = (date.year() as u32).saturating_sub(1980);
+    let month = date.month();
+    let day = date.day();
+
+    let hour = time.hour();
+    let minute = time.minute();
+    let second = time.second();
+
+    let mut date = 0u16;
+    set_bits(&mut date, year as u16, 9, 7);
+    set_bits(&mut date, month as u16, 5, 4);
+    set_bits(&mut date, day as u16, 0, 5);
+
+    let mut time = 0u16;
+    set_bits(&mut time, hour as u16, 11, 5);
+    set_bits(&mut time, minute as u16, 5, 6);
+    set_bits(&mut time, second as u16, 0, 5);
+
+    write_u16(data, date)?;
+    write_u16(data, time)?;
+
+    Ok(())
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -243,6 +282,60 @@ impl Debug for Guid {
 impl ToString for Guid {
     fn to_string(&self) -> String {
         format!("{:?}", self)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum GuidStringParseError {
+    #[error("Invalid format")]
+    InvalidFormat,
+    #[error("Invalid length")]
+    InvalidLength,
+    #[error("Invalid integer: {0}")]
+    ParseIntError(#[from] std::num::ParseIntError),
+}
+
+impl Guid {
+    pub fn from_str(s: &str) -> Result<Self, GuidStringParseError> {
+        let parts: Vec<&str> = s.split('-').collect();
+        if parts.len() != 5 {
+            return Err(GuidStringParseError::InvalidFormat);
+        }
+
+        let data1 = u32::from_str_radix(parts[0], 16)?;
+        let data2 = u16::from_str_radix(parts[1], 16)?;
+        let data3 = u16::from_str_radix(parts[2], 16)?;
+
+        let mut data4 = [0u8; 8];
+        let mut iter = parts[3..].iter().flat_map(|part| part.chars());
+
+        let mut index = 0;
+        while let Some((byte1, byte2)) = iter.next().zip(iter.next()) {
+            if index >= data4.len() {
+                return Err(GuidStringParseError::InvalidLength);
+            }
+            let mut byte_string = String::new();
+            byte_string.push(byte1);
+            byte_string.push(byte2);
+            data4[index] = u8::from_str_radix(&byte_string, 16)?;
+            index += 1;
+        }
+
+        Ok(Guid {
+            data1,
+            data2,
+            data3,
+            data4,
+        })
+    }
+
+    pub fn write(&self, data: &mut impl Write) -> Result<(), io::Error> {
+        write_u32(data, self.data1)?;
+        write_u16(data, self.data2)?;
+        write_u16(data, self.data3)?;
+        data.write_all(&self.data4)?;
+
+        Ok(())
     }
 }
 

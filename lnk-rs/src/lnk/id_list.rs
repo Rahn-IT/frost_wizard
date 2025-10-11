@@ -3,11 +3,9 @@ use std::io::{self, Read, Write};
 use chrono::NaiveDateTime;
 
 use crate::lnk::{
-    LnkParseError, LnkWriteError,
     helpers::{
-        DosDateTimeReadError, StringReadError, read_c_utf8, read_c_utf16, read_dos_datetime,
-        read_u8, read_u16, read_u32, read_u64,
-    },
+        read_c_utf16, read_c_utf8, read_dos_datetime, read_guid, read_u16, read_u32, read_u64, read_u8, write_dos_datetime, write_u16, write_u32, write_u8, DosDateTimeReadError, Guid, StringReadError
+    }, LnkParseError, LnkWriteError
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -120,7 +118,13 @@ impl IdList {
     }
 
     pub(crate) fn write(&self, data: &mut impl Write) -> Result<(), LnkWriteError> {
-        todo!()
+        let mut buffer = Vec::new();
+        for item in &self.id_list {
+            item.write(&mut buffer)?;
+        }
+        write_u16(data, buffer.len() as u16)?;
+        data.write_all(&buffer)?;
+        Ok(())
     }
 }
 
@@ -143,6 +147,16 @@ pub struct IdEntryData {
     pub localized_name: Option<String>,
 }
 
+impl IdEntryData {
+    pub fn write(&self, data: &mut impl Write) -> Result<(), LnkWriteError> {
+        write_u32(data, self.filesize)?;
+        write_dos_datetime(data, self.modified);
+        
+
+        todo!()
+    }
+}
+
 impl IdEntry {
     fn parse(data: &mut impl Read) -> Result<Self, IdListParseError> {
         let first_type_byte = read_u8(data)?;
@@ -161,9 +175,9 @@ impl IdEntry {
         match entry_type {
             EntryType::RootGuid => {
                 let _root_index = read_u8(data)?;
-                let mut raw_guid = [0u8; 16];
-                data.read_exact(&mut raw_guid)?;
-                let guid = RootLocationType::from_binary_guid(raw_guid)
+                let guid = read_guid(data)?;
+
+                let guid = RootLocationType::from_guid(guid)
                     .ok_or_else(|| IdListParseError::InvalidRootType)?;
 
                 Ok(Self::Root(guid))
@@ -264,6 +278,36 @@ impl IdEntry {
             _ => Err(IdListParseError::UnsupportedEntryType),
         }
     }
+
+    pub fn write(&self, data: &mut impl Write) -> Result<(), LnkWriteError> {
+        match self {
+            Self::Root(root_type) => {
+                write_u8(data, 0x1f)?;
+                write_u8(data, 0x50)?;
+                let guid = root_type.guid();
+                guid.write(data)?;
+            }
+            Self::Drive(letter) => {
+                write_u8(data, 0x2f)?;
+                let mut dst = [0u8; 4];
+                letter.encode_utf8(&mut dst);
+                write_u8(data, dst[0])?;
+                write_u8(data, 0x3a)?;
+                write_u8(data, 0x5c)?;
+                let junk_data = [0u8; 19];
+                data.write_all(&junk_data)?;
+            }
+            Self::Folder(id_entry) => {
+                write_u16(data, EntryType::FolderUnicode.to_type_id())?;
+                id_entry.write(data)?;
+            }
+            Self::File(id_entry) => {
+                write_u16(data, EntryType::FileUnicode.to_type_id())?;
+                id_entry.write(data)?;
+            }
+        }
+        todo!()
+    }
 }
 
 enum EntryType {
@@ -303,6 +347,22 @@ impl EntryType {
             _ => false,
         }
     }
+
+    fn to_type_id(&self) -> u16 {
+        match self {
+            Self::KnownFolder => 0x00,
+            Self::Folder => 0x31,
+            Self::File => 0x32,
+            Self::FolderUnicode => 0x35,
+            Self::FileUnicode => 0x36,
+            Self::KnownRootFolder => 0x802e,
+            Self::RootFolder => 0x1f,
+            Self::RootGuid => 0x61,
+            Self::Drive => 0x71,
+            Self::Uri => 0x71,
+            Self::ControlPanel => 0x71,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -321,6 +381,11 @@ pub enum RootLocationType {
 }
 
 impl RootLocationType {
+    fn from_guid(guid: Guid) -> Option<Self> {
+        let text = guid.to_string();
+        Self::from_text_guid(text.as_bytes())
+    }
+
     fn from_text_guid(guid: &[u8]) -> Option<Self> {
         match guid {
             b"{20D04FE0-3AEA-1069-A2D8-08002B30309D}" => Some(Self::MyComputer),
@@ -338,31 +403,24 @@ impl RootLocationType {
         }
     }
 
-    fn from_binary_guid(guid: [u8; 16]) -> Option<Self> {
-        let ordered = [
-            guid[3], guid[2], guid[1], guid[0], guid[5], guid[4], guid[7], guid[6], guid[8],
-            guid[9], guid[10], guid[11], guid[12], guid[13], guid[14], guid[15],
-        ];
-        let guid = format!(
-            "{{{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
-            ordered[0],
-            ordered[1],
-            ordered[2],
-            ordered[3],
-            ordered[4],
-            ordered[5],
-            ordered[6],
-            ordered[7],
-            ordered[8],
-            ordered[9],
-            ordered[10],
-            ordered[11],
-            ordered[12],
-            ordered[13],
-            ordered[14],
-            ordered[15]
-        );
+    fn str(&self) -> &str {
+        match self {
+            Self::MyComputer => "{20D04FE0-3AEA-1069-A2D8-08002B30309D}",
+            Self::MyDocuments => "{450D8FBA-AD25-11D0-98A8-0800361B1103}",
+            Self::NetworkShare => "{54a754c0-4bf1-11d1-83ee-00a0c90dc849}",
+            Self::NetworkServer => "{c0542a90-4bf0-11d1-83ee-00a0c90dc849}",
+            Self::NetworkPlaces => "{208D2C60-3AEA-1069-A2D7-08002B30309D}",
+            Self::NetworkDomain => "{46e06680-4bf0-11d1-83ee-00a0c90dc849}",
+            Self::Internet => "{871C5380-42A0-1069-A2EA-08002B30309D}",
+            Self::RecycleBin => "{645FF040-5081-101B-9F08-00AA002F954E}",
+            Self::ControlPanel => "{21EC2020-3AEA-1069-A2DD-08002B30309D}",
+            Self::User => "{59031A47-3F72-44A7-89C5-5595FE6B30EE}",
+            Self::UwpApps => "{4234D49B-0245-4DF3-B780-3893943456E1}",
+        }
+    }
 
-        Self::from_text_guid(guid.as_bytes())
+    fn guid(&self) -> Guid {
+        let text = self.str();
+        Guid::from_str(text).unwrap()
     }
 }

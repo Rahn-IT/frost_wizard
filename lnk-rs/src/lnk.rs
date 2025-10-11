@@ -6,7 +6,7 @@ use crate::lnk::{
     block_data::BlockData,
     helpers::{
         StringReadError, WindowsDateTimeError, read_i32, read_sized_string, read_u16, read_u32,
-        read_windows_datetime, write_c_utf16, write_i32, write_sized_utf16, write_u16, write_u32,
+        read_windows_datetime, write_i32, write_sized_utf16, write_u16, write_u32,
         write_windows_datetime,
     },
     id_list::IdList,
