@@ -65,6 +65,7 @@ impl BlockData {
 
         loop {
             let block_size = read_u32(data)?;
+            println!("Block size: {block_size}");
             if block_size <= 0x4 {
                 // Termination Block
                 break;
