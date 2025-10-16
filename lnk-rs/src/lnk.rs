@@ -107,6 +107,8 @@ impl Lnk {
             None
         };
 
+        println!("ID List: {:#?}", id_list);
+
         let link_info = if link_flags.contains(LinkFlags::HAS_LINK_INFO)
             && !link_flags.contains(LinkFlags::FORCE_NO_LINK_INFO)
         {

@@ -3,9 +3,12 @@ use std::io::{self, Read, Write};
 use chrono::NaiveDateTime;
 
 use crate::lnk::{
+    LnkParseError, LnkWriteError,
     helpers::{
-        read_c_utf16, read_c_utf8, read_dos_datetime, read_guid, read_u16, read_u32, read_u64, read_u8, write_dos_datetime, write_u16, write_u32, write_u8, DosDateTimeReadError, Guid, StringReadError
-    }, LnkParseError, LnkWriteError
+        DosDateTimeReadError, Guid, StringReadError, read_c_utf8, read_c_utf16, read_dos_datetime,
+        read_guid, read_u8, read_u16, read_u32, read_u64, write_dos_datetime, write_u8, write_u16,
+        write_u32,
+    },
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -22,8 +25,8 @@ pub enum IdListParseError {
     MissingDrive,
     #[error("Drive entry is invalid")]
     InvalidDriveEntry,
-    #[error("Unknown root type")]
-    InvalidRootType,
+    #[error("Unknown root type {0:?}")]
+    InvalidRootType(Guid),
     #[error("Root type not supported yet")]
     UnsupportedRootType,
     #[error("Uwp Paths elements not supported yet")]
@@ -151,7 +154,6 @@ impl IdEntryData {
     pub fn write(&self, data: &mut impl Write) -> Result<(), LnkWriteError> {
         write_u32(data, self.filesize)?;
         write_dos_datetime(data, self.modified);
-        
 
         todo!()
     }
@@ -177,8 +179,8 @@ impl IdEntry {
                 let _root_index = read_u8(data)?;
                 let guid = read_guid(data)?;
 
-                let guid = RootLocationType::from_guid(guid)
-                    .ok_or_else(|| IdListParseError::InvalidRootType)?;
+                let guid = RootLocationType::from_guid(guid.clone())
+                    .ok_or_else(|| IdListParseError::InvalidRootType(guid))?;
 
                 Ok(Self::Root(guid))
             }
@@ -388,34 +390,34 @@ impl RootLocationType {
 
     fn from_text_guid(guid: &[u8]) -> Option<Self> {
         match guid {
-            b"{20D04FE0-3AEA-1069-A2D8-08002B30309D}" => Some(Self::MyComputer),
-            b"{450D8FBA-AD25-11D0-98A8-0800361B1103}" => Some(Self::MyDocuments),
-            b"{54a754c0-4bf1-11d1-83ee-00a0c90dc849}" => Some(Self::NetworkShare),
-            b"{c0542a90-4bf0-11d1-83ee-00a0c90dc849}" => Some(Self::NetworkServer),
-            b"{208D2C60-3AEA-1069-A2D7-08002B30309D}" => Some(Self::NetworkPlaces),
-            b"{46e06680-4bf0-11d1-83ee-00a0c90dc849}" => Some(Self::NetworkDomain),
-            b"{871C5380-42A0-1069-A2EA-08002B30309D}" => Some(Self::Internet),
-            b"{645FF040-5081-101B-9F08-00AA002F954E}" => Some(Self::RecycleBin),
-            b"{21EC2020-3AEA-1069-A2DD-08002B30309D}" => Some(Self::ControlPanel),
-            b"{59031A47-3F72-44A7-89C5-5595FE6B30EE}" => Some(Self::User),
-            b"{4234D49B-0245-4DF3-B780-3893943456E1}" => Some(Self::UwpApps),
+            b"20D04FE0-3AEA-1069-A2D8-08002B30309D" => Some(Self::MyComputer),
+            b"450D8FBA-AD25-11D0-98A8-0800361B1103" => Some(Self::MyDocuments),
+            b"54a754c0-4bf1-11d1-83ee-00a0c90dc849" => Some(Self::NetworkShare),
+            b"c0542a90-4bf0-11d1-83ee-00a0c90dc849" => Some(Self::NetworkServer),
+            b"208D2C60-3AEA-1069-A2D7-08002B30309D" => Some(Self::NetworkPlaces),
+            b"46e06680-4bf0-11d1-83ee-00a0c90dc849" => Some(Self::NetworkDomain),
+            b"871C5380-42A0-1069-A2EA-08002B30309D" => Some(Self::Internet),
+            b"645FF040-5081-101B-9F08-00AA002F954E" => Some(Self::RecycleBin),
+            b"21EC2020-3AEA-1069-A2DD-08002B30309D" => Some(Self::ControlPanel),
+            b"59031A47-3F72-44A7-89C5-5595FE6B30EE" => Some(Self::User),
+            b"4234D49B-0245-4DF3-B780-3893943456E1" => Some(Self::UwpApps),
             _ => None,
         }
     }
 
     fn str(&self) -> &str {
         match self {
-            Self::MyComputer => "{20D04FE0-3AEA-1069-A2D8-08002B30309D}",
-            Self::MyDocuments => "{450D8FBA-AD25-11D0-98A8-0800361B1103}",
-            Self::NetworkShare => "{54a754c0-4bf1-11d1-83ee-00a0c90dc849}",
-            Self::NetworkServer => "{c0542a90-4bf0-11d1-83ee-00a0c90dc849}",
-            Self::NetworkPlaces => "{208D2C60-3AEA-1069-A2D7-08002B30309D}",
-            Self::NetworkDomain => "{46e06680-4bf0-11d1-83ee-00a0c90dc849}",
-            Self::Internet => "{871C5380-42A0-1069-A2EA-08002B30309D}",
-            Self::RecycleBin => "{645FF040-5081-101B-9F08-00AA002F954E}",
-            Self::ControlPanel => "{21EC2020-3AEA-1069-A2DD-08002B30309D}",
-            Self::User => "{59031A47-3F72-44A7-89C5-5595FE6B30EE}",
-            Self::UwpApps => "{4234D49B-0245-4DF3-B780-3893943456E1}",
+            Self::MyComputer => "20D04FE0-3AEA-1069-A2D8-08002B30309D",
+            Self::MyDocuments => "450D8FBA-AD25-11D0-98A8-0800361B1103",
+            Self::NetworkShare => "54a754c0-4bf1-11d1-83ee-00a0c90dc849",
+            Self::NetworkServer => "c0542a90-4bf0-11d1-83ee-00a0c90dc849",
+            Self::NetworkPlaces => "208D2C60-3AEA-1069-A2D7-08002B30309D",
+            Self::NetworkDomain => "46e06680-4bf0-11d1-83ee-00a0c90dc849",
+            Self::Internet => "871C5380-42A0-1069-A2EA-08002B30309D",
+            Self::RecycleBin => "645FF040-5081-101B-9F08-00AA002F954E",
+            Self::ControlPanel => "21EC2020-3AEA-1069-A2DD-08002B30309D",
+            Self::User => "59031A47-3F72-44A7-89C5-5595FE6B30EE",
+            Self::UwpApps => "4234D49B-0245-4DF3-B780-3893943456E1",
         }
     }
 

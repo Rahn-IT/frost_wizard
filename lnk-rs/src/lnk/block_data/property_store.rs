@@ -94,6 +94,7 @@ impl PropertyStore {
         loop {
             // Serialized Property Value — ends with ValueSize == 0
             let value_size = read_u32(r)?;
+            println!("Property Value Size: {}", value_size);
             if value_size == 0 {
                 break;
             }
@@ -149,6 +150,8 @@ impl PropertyStore {
                 self.unparsed_id_values.insert(format_id, map);
             }
         }
+
+        println!("Property Store: {self:#?}");
 
         Ok(())
     }
